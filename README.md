@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://readme-typing-svg.herokuapp.com?font=Fira+Code&weight=600&size=35&pause=1000&color=36BCF7&center=true&vCenter=true&width=800&lines=Welcome+to+Sunlo+Music;Fastest+%26+Most+Advanced+Bot;200%2B+Features+%7C+1-3s+Playback;Premium+Telegram+Music+Experience" alt="Typing SVG" />
+<img src="https://readme-typing-svg.herokuapp.com?font=Fira+Code&weight=600&size=35&pause=1000&color=36BCF7&center=true&vCenter=true&width=800&lines=Welcome+to+Sunlo+Music;Fastest+%26+Most+Advanced+Bot;300%2B+Features+%7C+1-3s+Playback;Premium+Telegram+Music+Experience" alt="Typing SVG" />
 
 <br>
 
@@ -8,14 +8,13 @@
 
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![FTMGram](https://img.shields.io/badge/Framework-FTMGram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://github.com)
-[![PyTgCalls](https://img.shields.io/badge/Engine-PyTgCalls_v2.x-FF5722?style=for-the-badge&logo=webrtc&logoColor=white)](https://github.com)
+[![PyTgCalls](https://img.shields.io/badge/Engine-PyTgCalls_v3.x-FF5722?style=for-the-badge&logo=webrtc&logoColor=white)](https://github.com)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-[![Maintained](https://img.shields.io/badge/Maintained-Yes-brightgreen?style=for-the-badge)](https://github.com/SunloMusicOfficial)
-[![Profile Views](https://komarev.com/ghpvc/?username=SunloMusicOfficial&color=blueviolet&style=for-the-badge)](https://github.com/SunloMusicOfficial)
+[![Maintained](https://img.shields.io/badge/Maintained-Yes-success?style=for-the-badge)](https://github.com/SunloMusicOfficial)
+[![Bot Status](https://img.shields.io/badge/Status-Online%20%26%20Fast-brightgreen?style=for-the-badge)](https://t.me/SunloMusicBot)
 
----
-
+<br>
 </div>
 
 ## ⚡ Why Sunlo Music?
@@ -23,9 +22,10 @@
 Tired of slow bots that take 5-10 seconds to play a song? **Sunlo Music** is built from scratch with a focus on **extreme speed, stability, and a premium user experience**. 
 
 - 🚀 **Ultra-Fast Streaming:** 1-3 second playback using direct URL extraction and smart preloading.
-- 🪶 **Lightweight Core:** Highly optimized memory management. Runs flawlessly on low-end VPS.
-- 🎛 **200+ Premium Features:** Equalizers, AI recommendations, playlists, live lyrics, and much more.
+- 🪶 **Lightweight Core:** Optimized memory management. Runs flawlessly on low-end VPS.
+- 🎛 **300+ Premium Features:** Equalizers, AI recommendations, playlists, live lyrics, and much more.
 - 🛡 **Zero Leakage:** Built on FTMGram to ensure no file descriptor leaks, guaranteeing 99.9% uptime.
+- 🌐 **Web Dashboard:** Built-in Flask API for monitoring bot stats.
 
 ---
 
@@ -35,6 +35,7 @@ Bot deploy karne se pehle aapke paas yeh hona chahiye:
 2. **Bot Token** (from [@BotFather](https://t.me/BotFather))
 3. **MongoDB URI** (from [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) - Free tier)
 4. **Pyrogram Session String** (Assistant account ke liye - script included hai)
+5. **AudD API Key** (Optional, `/shazam` command ke liye from [audd.io](https://dashboard.audd.io/))
 
 ---
 
@@ -42,7 +43,7 @@ Bot deploy karne se pehle aapke paas yeh hona chahiye:
 
 ### 1️⃣ Termux (Local Testing)
 **Guide:** 
-Termux ka default Python abhi unstable hota hai, isliye hum ek Ubuntu environment banayenge `proot-distro` ke through. Isme Python 3.12 aur zaroori libraries install karenge, phir bot clone karke run karenge.
+Termux ka default Python unstable hota hai, isliye hum ek Ubuntu environment banayenge `proot-distro` ke through. Isme Python 3.12 aur zaroori libraries install karenge.
 
 **Commands:**
 ```bash
@@ -54,7 +55,7 @@ proot-distro login ubuntu
 
 # 2. Ubuntu ke andar dependencies install karein
 apt update && apt upgrade -y
-apt install -y python3.12 python3.12-venv python3.12-dev ffmpeg git build-essential
+apt install -y python3.12 python3.12-venv python3.12-dev ffmpeg git nodejs build-essential
 
 # 3. Bot ko clone karein aur environment setup karein
 git clone https://github.com/SunloMusicOfficial/SunloMusic.git
@@ -78,7 +79,7 @@ python SunloMusic.py
 
 ### 2️⃣ VPS (Ubuntu / Debian)
 **Guide:** 
-Agar aapke paas VPS hai (DigitalOcean, AWS, etc.), toh aapko Python 3.12 ki zaroorat padegi. Ubuntu 22.04 par yeh default nahi hota, isliye hum `deadsnakes` PPA ka use karke ise install karenge. Phir virtual environment banakar bot ko 24/7 run kar sakte hain.
+Agar aapke paas VPS hai (DigitalOcean, AWS, etc.), toh aapko Python 3.12 ki zaroorat padegi. Hum `deadsnakes` PPA ka use karke ise install karenge.
 
 **Commands:**
 ```bash
@@ -87,7 +88,7 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install -y software-properties-common
 sudo add-apt-repository -y ppa:deadsnakes/ppa
 sudo apt update
-sudo apt install -y python3.12 python3.12-venv python3.12-dev ffmpeg git build-essential
+sudo apt install -y python3.12 python3.12-venv python3.12-dev ffmpeg git nodejs build-essential
 
 # 2. Clone and Setup
 git clone https://github.com/SunloMusicOfficial/SunloMusic.git
@@ -108,7 +109,7 @@ python SunloMusic.py
 
 ### 3️⃣ Docker (For Advanced Users)
 **Guide:** 
-Agar aap Docker use karte hain, toh aapko manually Python install karne ki zaroorat nahi hai. Bas ek `.env` file banayein, image build karein, aur container run kar dein.
+Agar aap Docker use karte hain, toh aapko manually Python install karne ki zaroorat nahi hai.
 
 **Commands:**
 ```bash
@@ -122,20 +123,20 @@ nano .env
 
 # 3. Build & Run Container
 docker build -t sunlo-music .
-docker run -d --name sunlo-bot --env-file .env --restart unless-stopped sunlo-music
+docker run -d --name sunlo-bot --env-file .env --restart unless-stopped -p 8080:8080 sunlo-music
 ```
 
 ---
 
 ### 4️⃣ Cloud Platforms (Heroku / Railway / Render)
 **Guide:** 
-In platforms par aapko sirf GitHub repo link karni hai aur dashboard mein Environment Variables add karne hain. Koi terminal command nahi chalani padti.
+In platforms par aapko sirf GitHub repo link karni hai aur dashboard mein Environment Variables add karne hain.
 
 1. Apna GitHub repo fork/clone karein.
 2. Railway/Heroku par naya project banayein aur GitHub connect karein.
 3. **Settings > Environment Variables** mein jayein aur `.env.example` mein diye gaye saare variables (API_ID, API_HASH, BOT_TOKEN, MONGO_URI, etc.) add karein.
 4. **Start Command** set karein: `python SunloMusic.py`
-5. **Note:** Heroku/Render ke ephemeral disk par cache save nahi hota, isliye playback ke liye MongoDB aur proper caching logic zaroori hai.
+5. **Note:** Heroku/Render ke ephemeral disk par cache save nahi hota, isliye MongoDB aur proper caching logic zaroori hai.
 
 ---
 
@@ -158,7 +159,7 @@ In platforms par aapko sirf GitHub repo link karni hai aur dashboard mein Enviro
         <li>Real-time Equalizer</li>
         <li>Bass Boost & Nightcore</li>
         <li>8D Audio & Slowed+Reverb</li>
-        <li>Variable Playback Speed</li>
+        <li>Variable Playback Speed & Pitch</li>
       </ul>
     </td>
   </tr>
@@ -191,15 +192,46 @@ In platforms par aapko sirf GitHub repo link karni hai aur dashboard mein Enviro
 ```text
 SunloMusic/
 ├── SunloMusic.py         # Main Entry Point
+├── web_server.py         # Web Dashboard API
 ├── config/               # Settings & Constants
 ├── core/                 # Bot, Userbot, DB & Calls Engine
-├── plugins/              # Commands (Play, Controls, Admin)
+├── plugins/              # 40+ Commands (Music, Controls, Admin, AI)
 ├── utils/                # Fast Downloader, Cache & Logger
 ├── database/             # MongoDB CRUD Operations
 ├── scripts/              # Session Generator & Installers
 ├── assets/               # Images & Language Files
 └── cache/                # Downloaded Songs Cache
 ```
+
+---
+
+## 🔐 Environment Variables
+
+To run this bot, you must set these variables in your `.env` file or hosting dashboard:
+
+| Variable | Description |
+| :--- | :--- |
+| `API_ID` | Telegram API ID from [my.telegram.org](https://my.telegram.org) |
+| `API_HASH` | Telegram API Hash from [my.telegram.org](https://my.telegram.org) |
+| `BOT_TOKEN` | Bot Token from [@BotFather](https://t.me/BotFather) |
+| `SESSION_STRING` | Pyrogram String Session (Assistant Account) |
+| `MONGO_URI` | MongoDB Connection URL |
+| `OWNER_ID` | Your Telegram User ID |
+| `SUDO_USERS` | Space-separated list of Sudo User IDs |
+| `AUDD_API_KEY` | (Optional) For Shazam feature |
+
+---
+
+## 🛠️ Troubleshooting (Common Errors)
+
+1. **`ModuleNotFoundError: No module named 'config'`**
+   * **Fix:** Make sure you are running `python SunloMusic.py` from the root folder (not from inside `plugins/`).
+2. **`ffprobe not installed`**
+   * **Fix:** Run `apt install ffmpeg` in your terminal.
+3. **`WEBPAGE_CURL_FAILED`**
+   * **Fix:** Telegram couldn't fetch your image URL. Try changing `START_IMG_URL` in `.env` to a valid direct image link (`.jpg` or `.png`).
+4. **`InvalidMTProtoClient`**
+   * **Fix:** PyTgCalls doesn't support your fork. Run `pip install pyrofork` and change `from ftmgram import Client` to `from pyrogram import Client` in `core/userbot.py`.
 
 ---
 
