@@ -28,7 +28,7 @@ async def play_handler(client, message):
     chat_id = message.chat.id
     
     # 3. Check if bot is already playing in this chat
-    active_calls = await calls.get_active_calls()
+    active_calls = await calls.calls
     if chat_id in active_calls:
         # Add to queue
         await add_to_queue(chat_id, song)

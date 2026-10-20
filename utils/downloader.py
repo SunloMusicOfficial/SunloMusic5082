@@ -5,10 +5,17 @@ from utils.cache import cache_manager
 from config.settings import settings
 
 logger = get_logger("Downloader")
+
 YDL_OPTS = {
     "format": "bestaudio/best",
     "outtmpl": f"{settings.CACHE_DIR}/%(id)s.%(ext)s",
-    "quiet": True, "noplaylist": True, "geo_bypass": True, "nocheckcertificate": True,
+    "quiet": True, 
+    "noplaylist": True, 
+    "geo_bypass": True, 
+    "nocheckcertificate": True,
+    "default_search": "ytsearch1",
+    "js_runtimes": {"node": {}},
+    "remote_components": ["ejs:github"]  # <--- FIX
 }
 
 class Downloader:
@@ -18,13 +25,29 @@ class Downloader:
     async def search_and_extract(self, query: str):
         def _extract():
             try:
-                if not query.startswith("http"): query = f"ytsearch1:{query}"
-                info = self.ydl.extract_info(query, download=False)
-                if "entries" in info: info = info["entries"][0]
+                search_query = query
+                if not search_query.startswith("http"):
+                    search_query = f"ytsearch1:{search_query}"
+                
+                info = self.ydl.extract_info(search_query, download=False)
+                if "entries" in info and info["entries"]:
+                    info = info["entries"][0]
+                
                 video_id = info.get("id")
+                formats = info.get("formats", [])
+                stream_url = info.get("url")
+                
+                if not stream_url and formats:
+                    for f in formats:
+                        if f.get("acodec") != "none":
+                            stream_url = f.get("url")
+                            break
+                            
                 return {
-                    "id": video_id, "title": info.get("title", "Unknown"),
-                    "duration": info.get("duration", 0), "stream_url": info.get("url"),
+                    "id": video_id, 
+                    "title": info.get("title", "Unknown"),
+                    "duration": info.get("duration", 0), 
+                    "stream_url": stream_url,
                     "file_path": cache_manager.get_cached_file(video_id),
                     "uploader": info.get("uploader", "Unknown")
                 }

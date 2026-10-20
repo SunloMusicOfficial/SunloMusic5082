@@ -7,7 +7,7 @@ from core.calls import calls
 @app.on_message(filters.command("stats") & filters.user(settings.OWNER_ID))
 async def stats_handler(client, message):
     users = await get_total_users()
-    active_vcs = len(await calls.get_active_calls())
+    active_vcs = len(await calls.calls)
     text = (
         "📊 **Bot Statistics**\n\n"
         f"👥 **Total Users:** `{users}`\n"

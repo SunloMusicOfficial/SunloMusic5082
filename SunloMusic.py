@@ -5,9 +5,9 @@ from pathlib import Path
 
 from ftmgram import idle
 from config.settings import settings
-from core.bot import app
-from core.userbot import userbot
-from core.calls import calls
+from core.bot import create_bot, app as global_app
+from core.userbot import create_userbot, userbot as global_userbot
+from core.calls import create_calls, calls as global_calls
 from core.database import db
 from core.health import health_monitor
 from utils.logger import get_logger
@@ -17,11 +17,9 @@ logger = get_logger("SunloMusic")
 PLUGINS_DIR = Path("plugins")
 
 def load_plugins():
-    """Automatically load all plugins from the plugins directory."""
     loaded = []
     for file in sorted(PLUGINS_DIR.glob("*.py")):
-        if file.name.startswith("_"): 
-            continue
+        if file.name.startswith("_"): continue
         module_name = f"plugins.{file.stem}"
         try:
             importlib.import_module(module_name)
@@ -30,7 +28,7 @@ def load_plugins():
             logger.error(f"❌ Failed to load {file.stem}: {e}")
     return loaded
 
-async def startup():
+async def startup(app, userbot, calls):
     print("""
     ╔══════════════════════════════════════════╗
     ║        🎵  S U N L O   M U S I C  🎵       ║
@@ -38,40 +36,30 @@ async def startup():
     ╚══════════════════════════════════════════╝
     """)
     
-    # Clear old logs if they are too big
     clear_old_logs()
-    
-    # Validate environment variables
     settings.validate()
     
-    # Start Assistant Userbot (For Voice Chat)
     await userbot.start()
     logger.info("🤖 Assistant Userbot started")
     
-    # Start Main Bot
     await app.start()
     me = await app.get_me()
     logger.info(f"✅ Bot started as @{me.username}")
     
-    # Connect to MongoDB Database
     await db.connect()
     logger.info("🗄️ Database connected successfully")
     
-    # Start PyTgCalls Engine
     await calls.start()
     logger.info("📞 PyTgCalls voice engine started")
     
-    # Load Plugins
     plugins = load_plugins()
     logger.info(f"🔌 {len(plugins)} plugins loaded successfully")
     
-    # Start Health Monitor (Background Task)
     asyncio.create_task(health_monitor(calls, app, userbot))
     logger.info("💚 Health monitor is now active")
-    
     logger.info("🚀 Sunlo Music is ready to rock!")
 
-async def shutdown():
+async def shutdown(app, userbot, calls):
     logger.warning("🛑 Shutting down gracefully...")
     try:
         await calls.stop()
@@ -83,13 +71,18 @@ async def shutdown():
     logger.info("👋 Goodbye!")
 
 async def main():
+    # Initialize all clients inside the event loop
+    app = create_bot()
+    userbot = create_userbot()
+    calls = create_calls(userbot)
+    
     try:
-        await startup()
-        await idle() # Keeps the bot running
+        await startup(app, userbot, calls)
+        await idle()
     except KeyboardInterrupt:
-        logger.warning("Keyboard Interrupt detected.")
+        pass
     finally:
-        await shutdown()
+        await shutdown(app, userbot, calls)
 
 if __name__ == "__main__":
     try:

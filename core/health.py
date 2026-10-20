@@ -11,7 +11,7 @@ async def health_monitor(calls, app, userbot):
             await asyncio.sleep(300)
             
             # Log stats
-            active_calls = len(await calls.active_calls)
+            active_calls = len(await calls.calls)
             logger.info(f"💚 Health Check: Bot is alive. Active Voice Chats: {active_calls}")
             
         except asyncio.CancelledError:
