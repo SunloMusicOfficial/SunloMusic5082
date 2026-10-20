@@ -16,6 +16,7 @@ class Settings:
     BOT_USERNAME = os.getenv("BOT_USERNAME", "@SunloMusicBot")
     SUPPORT_CHANNEL = os.getenv("SUPPORT_CHANNEL", "")
     SUPPORT_CHAT = os.getenv("SUPPORT_CHAT", "")
+    START_IMG_URL = os.getenv("START_IMG_URL", "")
     CACHE_DIR = os.getenv("CACHE_DIR", "cache")
     MAX_CACHE_SIZE_MB = int(os.getenv("MAX_CACHE_SIZE_MB", 2048))
     PRELOAD_NEXT = os.getenv("PRELOAD_NEXT", "True").lower() == "true"

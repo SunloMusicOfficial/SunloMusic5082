@@ -1,11 +1,31 @@
+from config.settings import settings
+
 class Constants:
     VERSION = "1.0.0"
-    START_IMG = "https://telegra.ph/file/your_start_image.jpg"
-    EMOJI_PLAY = "▶️"
-    EMOJI_PAUSE = "⏸"
-    EMOJI_SKIP = "⏭"
-    EMOJI_STOP = "⏹"
-    START_TEXT = "👋 Welcome to **Sunlo Music**!\n\nI am the fastest and most advanced music bot. Use /help to see my features."
-    HELP_TEXT = "📚 **Sunlo Music Commands**\n\n/play - Play song\n/pause - Pause stream\n/resume - Resume stream\n/skip - Skip song\n/stop - Stop music"
+    # Image ab .env se aayegi
+    START_IMG = settings.START_IMG_URL 
+    
+    START_TEXT = (
+        "👋 <b>Welcome to Sunlo Music!</b>\n\n"
+        "I am the fastest and most advanced music bot.\n\n"
+        "✨ <b>Why choose me?</b>\n"
+        "▸ Lightning fast 1-3s playback\n"
+        "▸ High-quality audio streaming\n"
+        "▸ Ad-free, premium experience\n\n"
+        "Add me to your group and use /play to start!"
+    )
+    
+    HELP_TEXT = (
+        "📚 <b>Sunlo Music Commands</b>\n\n"
+        "🎵 <b>Playback:</b>\n"
+        "▸ /play <song> - Play a song\n"
+        "▸ /pause - Pause the stream\n"
+        "▸ /resume - Resume the stream\n"
+        "▸ /skip - Skip to next track\n"
+        "▸ /stop - Stop and leave VC\n\n"
+        "🛠 <b>Other:</b>\n"
+        "▸ /song <name> - Download audio\n"
+        "▸ /stats - Bot statistics (Admin only)"
+    )
 
 constants = Constants()

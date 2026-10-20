@@ -15,7 +15,7 @@ YDL_OPTS = {
     "nocheckcertificate": True,
     "default_search": "ytsearch1",
     "js_runtimes": {"node": {}},
-    "remote_components": ["ejs:github"]  # <--- FIX
+    "remote_components": ["ejs:github"]
 }
 
 class Downloader:
@@ -43,13 +43,20 @@ class Downloader:
                             stream_url = f.get("url")
                             break
                             
+                # THUMBNAIL FIX ADDED HERE
+                thumbnails = info.get("thumbnails", [])
+                thumbnail_url = info.get("thumbnail")
+                if not thumbnail_url and thumbnails:
+                    thumbnail_url = thumbnails[-1].get("url")
+
                 return {
                     "id": video_id, 
                     "title": info.get("title", "Unknown"),
                     "duration": info.get("duration", 0), 
                     "stream_url": stream_url,
                     "file_path": cache_manager.get_cached_file(video_id),
-                    "uploader": info.get("uploader", "Unknown")
+                    "uploader": info.get("uploader", "Unknown"),
+                    "thumbnail": thumbnail_url  # <--- Added Thumbnail
                 }
             except Exception as e:
                 logger.error(f"Extract error: {e}")

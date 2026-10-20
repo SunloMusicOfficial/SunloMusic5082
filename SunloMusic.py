@@ -5,9 +5,9 @@ from pathlib import Path
 
 from ftmgram import idle
 from config.settings import settings
-from core.bot import create_bot, app as global_app
-from core.userbot import create_userbot, userbot as global_userbot
-from core.calls import create_calls, calls as global_calls
+from core.bot import app
+from core.userbot import userbot
+import core.calls as calls_module
 from core.database import db
 from core.health import health_monitor
 from utils.logger import get_logger
@@ -28,7 +28,7 @@ def load_plugins():
             logger.error(f"❌ Failed to load {file.stem}: {e}")
     return loaded
 
-async def startup(app, userbot, calls):
+async def startup():
     print("""
     ╔══════════════════════════════════════════╗
     ║        🎵  S U N L O   M U S I C  🎵       ║
@@ -49,20 +49,24 @@ async def startup(app, userbot, calls):
     await db.connect()
     logger.info("🗄️ Database connected successfully")
     
-    await calls.start()
+    # ── FIX: Load PyTgCalls inside the active event loop ──
+    from pytgcalls import PyTgCalls
+    calls_module.calls = PyTgCalls(userbot)
+    await calls_module.calls.start()
     logger.info("📞 PyTgCalls voice engine started")
     
     plugins = load_plugins()
     logger.info(f"🔌 {len(plugins)} plugins loaded successfully")
     
-    asyncio.create_task(health_monitor(calls, app, userbot))
+    asyncio.create_task(health_monitor(app, userbot))
     logger.info("💚 Health monitor is now active")
     logger.info("🚀 Sunlo Music is ready to rock!")
 
-async def shutdown(app, userbot, calls):
+async def shutdown():
     logger.warning("🛑 Shutting down gracefully...")
     try:
-        await calls.stop()
+        if calls_module.calls:
+            await calls_module.calls.stop()
         await app.stop()
         await userbot.stop()
         await db.disconnect()
@@ -71,18 +75,13 @@ async def shutdown(app, userbot, calls):
     logger.info("👋 Goodbye!")
 
 async def main():
-    # Initialize all clients inside the event loop
-    app = create_bot()
-    userbot = create_userbot()
-    calls = create_calls(userbot)
-    
     try:
-        await startup(app, userbot, calls)
+        await startup()
         await idle()
     except KeyboardInterrupt:
         pass
     finally:
-        await shutdown(app, userbot, calls)
+        await shutdown()
 
 if __name__ == "__main__":
     try:

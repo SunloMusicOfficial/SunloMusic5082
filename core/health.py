@@ -1,19 +1,16 @@
 import asyncio
 from utils.logger import get_logger
+import core.calls as calls_module
 
 logger = get_logger("HealthMonitor")
 
-async def health_monitor(calls, app, userbot):
-    """Background task to check if bot and voice engine are alive."""
+async def health_monitor(app, userbot):
     while True:
         try:
-            # Simple ping check every 5 minutes
             await asyncio.sleep(300)
-            
-            # Log stats
-            active_calls = len(await calls.calls)
-            logger.info(f"💚 Health Check: Bot is alive. Active Voice Chats: {active_calls}")
-            
+            if calls_module.calls:
+                active_calls = len(await calls_module.calls.calls)
+                logger.info(f"💚 Health Check: Bot is alive. Active Voice Chats: {active_calls}")
         except asyncio.CancelledError:
             break
         except Exception as e:
