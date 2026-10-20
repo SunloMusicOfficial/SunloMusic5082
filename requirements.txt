@@ -1,13 +1,7 @@
-# ── MTProto Client (Pyrogram-compatible, highly stable) ──
 ftmgram
-
-# ── Voice Engine ──
+pyrofork
 py-tgcalls>=2.1.0
-
-# ── Database ──
 motor>=3.4.0
-
-# ── Utilities ──
 python-dotenv
 yt-dlp
 ffmpeg-python
@@ -15,7 +9,17 @@ aiohttp
 aiofiles
 Pillow
 pytz
-
-# ── Speed & Performance ──
 uvloop
-pyrofork
+psutil
+wikipedia
+gtts
+googlesearch-python
+qrcode
+requests
+beautifulsoup4
+deep-translator
+pyshorteners
+SpeechRecognition
+audd
+flask
+gunicorn

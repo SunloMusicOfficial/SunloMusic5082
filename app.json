@@ -1,0 +1,17 @@
+{
+  "name": "SunloMusic",
+  "description": "Fastest & Premium Telegram Music Bot",
+  "repository": "https://github.com/SunloMusicOfficial/SunloMusic",
+  "keywords": ["telegram", "music", "bot", "python"],
+  "env": {
+    "API_ID": {"description": "Telegram API ID"},
+    "API_HASH": {"description": "Telegram API HASH"},
+    "BOT_TOKEN": {"description": "Telegram Bot Token"},
+    "SESSION_STRING": {"description": "Pyrogram Session String"},
+    "MONGO_URI": {"description": "MongoDB URL"},
+    "OWNER_ID": {"description": "Your Telegram ID"},
+    "AUDD_API_KEY": {"description": "AudD API Key for Shazam (Optional)", "required": false}
+  },
+  "buildpacks": [{"url": "heroku/python"}],
+  "formation": {"worker": {"quantity": 1, "size": "basic"}}
+}

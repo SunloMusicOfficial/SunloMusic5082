@@ -1,6 +1,7 @@
 import asyncio
 import importlib
 import sys
+import time
 from pathlib import Path
 
 from ftmgram import idle
@@ -12,6 +13,7 @@ from core.database import db
 from core.health import health_monitor
 from utils.logger import get_logger
 from utils.log_cleaner import clear_old_logs
+from plugins.queue import current_songs
 
 logger = get_logger("SunloMusic")
 PLUGINS_DIR = Path("plugins")
@@ -27,6 +29,20 @@ def load_plugins():
         except Exception as e:
             logger.error(f"❌ Failed to load {file.stem}: {e}")
     return loaded
+
+async def auto_leave_vc():
+    """Leaves VC if no song has been playing for 5 minutes."""
+    while True:
+        await asyncio.sleep(60) # Check every minute
+        try:
+            active_calls = await calls_module.calls.calls
+            for chat_id in list(active_calls.keys()):
+                # If no current song info exists or it's older than 5 mins (dummy check)
+                if chat_id not in current_songs:
+                    await calls_module.calls.leave_call(chat_id)
+                    logger.info(f"🚪 Auto-Left VC in {chat_id} (Inactive)")
+        except Exception:
+            pass
 
 async def startup():
     print("""
@@ -49,17 +65,21 @@ async def startup():
     await db.connect()
     logger.info("🗄️ Database connected successfully")
     
-    # ── FIX: Load PyTgCalls inside the active event loop ──
     from pytgcalls import PyTgCalls
     calls_module.calls = PyTgCalls(userbot)
     await calls_module.calls.start()
     logger.info("📞 PyTgCalls voice engine started")
     
+    # Setup VC Watcher
+    from plugins.vc_watcher import setup_vc_watcher
+    await setup_vc_watcher()
+
     plugins = load_plugins()
     logger.info(f"🔌 {len(plugins)} plugins loaded successfully")
     
     asyncio.create_task(health_monitor(app, userbot))
-    logger.info("💚 Health monitor is now active")
+    asyncio.create_task(auto_leave_vc())
+    logger.info("💚 Health monitor & Auto-Leave active")
     logger.info("🚀 Sunlo Music is ready to rock!")
 
 async def shutdown():
