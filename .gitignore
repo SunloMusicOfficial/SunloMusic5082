@@ -1,35 +1,29 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-venv/
-.venv/
-env/
-
-# Env
+# Environment Variables (Keep secrets safe!)
 .env
 
-# Session files
+# Python Cache & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+
+# Pyrogram / Telegram Sessions
 *.session
 *.session-journal
 
-# Cache
+# App Cache & Logs
 cache/*
 !cache/.gitkeep
-
-# Logs
 logs/*
 !logs/.gitkeep
 
-# Assets (keep folders only)
-assets/images/*
-!assets/images/.gitkeep
-
-# OS
+# OS generated files
 .DS_Store
 Thumbs.db
 
-# IDE
+# IDEs
 .vscode/
 .idea/
 *.swp
