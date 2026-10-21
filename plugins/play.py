@@ -75,22 +75,16 @@ async def play_handler(client, message):
     query = " ".join(message.command[1:])
     m = await client.send_message(message.chat.id, "🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
     
-    # 🔥 DIRECT PLAY: No multiple options
     song = await downloader.search_and_extract(query)
     if not song:
-        return await m.edit_text("❌ <b>ɴᴏ ʀᴇꜱᴜʟᴛꜱ ꜰᴏᴜɴᴅ!</b>", parse_mode=enums.ParseMode.HTML)
+        return await m.edit_text("❌ <b>ɴᴏ ʀᴇꜱᴜʟᴛꜱ ꜰᴏᴜɴᴅ!</b>\n<i>API down or Video unavailable.</i>", parse_mode=enums.ParseMode.HTML)
 
     await play_song_by_id(client, message, m, song['id'], is_video)
 
 async def play_song_by_id(client, message, m, video_id, is_video=False):
-    stream_url = await downloader.get_stream(video_id)
-    if not stream_url: 
-        return await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n<i>YouTube block or API issue.</i>", parse_mode=enums.ParseMode.HTML)
-    
-    # Get metadata
-    song = await downloader.search_and_extract(video_id)
-    if not song:
-        song = {"id": video_id, "title": "Unknown Track", "duration": 0, "thumbnail": None}
+    song = await downloader.get_stream(video_id)
+    if not song: 
+        return await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n<i>Could not extract stream URL.</i>", parse_mode=enums.ParseMode.HTML)
     
     await increment_play_count(song.get('title', 'Unknown'))
     if hasattr(message, 'from_user') and message.from_user:
@@ -109,16 +103,12 @@ async def play_song_by_id(client, message, m, video_id, is_video=False):
 
     requester = message.from_user.mention if hasattr(message, 'from_user') and message.from_user else "Channel"
     
-    custom_caption = await get_chat_setting(chat_id, "custom_caption")
-    if custom_caption:
-        caption = custom_caption.replace("{title}", title_short).replace("{user}", requester) + f"\n\n<code>00:00</code> {generate_bar(0, song.get('duration', 0))} <code>{dur_str}</code>"
-    else:
-        caption = (
-            f"<blockquote>🎧 <b>𝐒𝐓𝐑𝐄𝐀𝐌𝐈𝐍𝐆 {'𝐕𝐈𝐃𝐄𝐎' if is_video else '𝐍𝐎𝐖'}</b>\n\n"
-            f"🎵 <b>{title_short}</b>\n⏳ <b>𝐃𝐮𝐫𝐚𝐭𝐢𝐨𝐧 :</b> {dur_str}\n"
-            f"👤 <b>𝐑𝐞𝐪𝐮𝐞𝐬𝐭 :</b> {requester}</blockquote>\n"
-            f"<code>00:00</code> {generate_bar(0, song.get('duration', 0))} <code>{dur_str}</code>"
-        )
+    caption = (
+        f"<blockquote>🎧 <b>𝐒𝐓𝐑𝐄𝐀𝐌𝐈𝐍𝐆 {'𝐕𝐈𝐃𝐄𝐎' if is_video else '𝐍𝐎𝐖'}</b>\n\n"
+        f"🎵 <b>{title_short}</b>\n⏳ <b>𝐃𝐮𝐫𝐚𝐭𝐢𝐨𝐧 :</b> {dur_str}\n"
+        f"👤 <b>𝐑𝐞𝐪𝐮𝐞𝐬𝐭 :</b> {requester}</blockquote>\n"
+        f"<code>00:00</code> {generate_bar(0, song.get('duration', 0))} <code>{dur_str}</code>"
+    )
 
     if chat_id in active_calls:
         await add_to_queue(chat_id, song)
@@ -126,23 +116,22 @@ async def play_song_by_id(client, message, m, video_id, is_video=False):
     else:
         await m.edit_text("▸ <b>𝐂𝐨𝐧𝐧𝐞𝐜𝐭𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
         try:
-            # PyTgCalls play
-            await calls_module.calls.play(chat_id, MediaStream(stream_url, video=is_video))
+            await calls_module.calls.play(chat_id, MediaStream(song['stream_url']))
             current_songs[chat_id] = song
             playback_start_times[chat_id] = time.time()
             btns = get_player_buttons(chat_id)
             
-            custom_thumb = await get_chat_setting(chat_id, "custom_thumb")
-            thumb = custom_thumb if custom_thumb else song.get('thumbnail')
-
+            thumb = song.get('thumbnail')
             sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
+            
             if thumb and not is_video:
                 try:
                     await m.delete()
                     sent_msg = await client.send_photo(chat_id, photo=thumb, caption=caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
                 except: pass
+                
             if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
             live_timer_tasks[chat_id] = asyncio.create_task(update_live_timer(chat_id, sent_msg, song.get('duration', 0)))
         except Exception as e:
             logger.error(f"Play error: {e}")
-            await m.edit_text(f"❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n<code>{e}</code>", parse_mode=enums.ParseMode.HTML)
+            await m.edit_text(f"❌ <b>ꜰᴀɪʟᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴠᴄ.</b>\n<code>{e}</code>", parse_mode=enums.ParseMode.HTML)
