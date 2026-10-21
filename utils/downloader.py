@@ -1,81 +1,81 @@
 import asyncio
+from yukiapi import YukiAPI
 from utils.logger import get_logger
 from utils.cache import cache_manager
 from config.settings import settings
 
 logger = get_logger("Downloader")
 
-YDL_OPTS = {
-    "format": "bestaudio/best",
-    "outtmpl": f"{settings.CACHE_DIR}/%(id)s.%(ext)s",
-    "quiet": True, "noplaylist": True, "geo_bypass": True, 
-    "nocheckcertificate": True, "js_runtimes": {"node": {}},
-    "remote_components": ["ejs:github"]
-}
-
 class Downloader:
-    def __init__(self):
-        self.ydl = None # Abhi load nahi hoga
-
-    def _get_ydl(self):
-        # Jab zaroorat padegi tab load hoga (Lazy Loading)
-        if self.ydl is None:
-            import yt_dlp
-            self.ydl = yt_dlp.YoutubeDL(YDL_OPTS)
-        return self.ydl
-
     async def search_and_extract(self, query: str, platform="yt"):
-        def _extract():
-            try:
-                ydl = self._get_ydl()
-                search_query = query
-                if not search_query.startswith("http"):
-                    prefix = "ytsearch1:" if platform == "yt" else "scsearch1:"
-                    search_query = f"{prefix}{search_query}"
-                
+        try:
+            async with YukiAPI() as yuki:
+                # 1. Details fetch karo (title, duration, thumbnail, video_id)
+                title, dur_min, dur_sec, thumb, vidid = await yuki.details(query)
+                duration = (int(dur_min) * 60) + int(dur_sec)
+
+                # 2. Direct stream URL nikaalo (PyTgCalls ke liye ready)
+                stream_url = await yuki.get_stream(query, type="audio")
+
+                return {
+                    "id": vidid,
+                    "title": title,
+                    "duration": duration,
+                    "stream_url": stream_url,
+                    "thumbnail": thumb,
+                    "uploader": "YukiAPI",
+                    "file_path": cache_manager.get_cached_file(vidid)
+                }
+        except Exception as e:
+            logger.error(f"YukiAPI search_and_extract failed: {e}")
+            # Fallback: agar YukiAPI fail ho jaye toh yt-dlp try karo (optional)
+            return await self._fallback_search(query, platform)
+
+    async def download_media(self, video_id: str, is_video=False):
+        try:
+            async with YukiAPI() as yuki:
+                file_path = await yuki.download(
+                    video_id,
+                    type="video" if is_video else "audio",
+                    output_dir=settings.CACHE_DIR
+                )
+                return file_path
+        except Exception as e:
+            logger.error(f"YukiAPI download failed: {e}")
+            return None
+
+    async def _fallback_search(self, query: str, platform="yt"):
+        """Agar YukiAPI kaam na kare toh purana yt-dlp use karega."""
+        try:
+            import yt_dlp
+            YDL_OPTS = {
+                "format": "bestaudio/best",
+                "quiet": True,
+                "noplaylist": True,
+                "geo_bypass": True,
+                "nocheckcertificate": True,
+                "extractor_args": {"youtube": {"player_client": ["android_vr"]}},
+                "js_runtimes": {"node": {}},
+                "remote_components": ["ejs:github"],
+            }
+            def _extract():
+                ydl = yt_dlp.YoutubeDL(YDL_OPTS)
+                search_query = query if query.startswith("http") else f"ytsearch1:{query}"
                 info = ydl.extract_info(search_query, download=False)
                 if "entries" in info and info["entries"]:
                     info = info["entries"][0]
-                
-                video_id = info.get("id")
-                formats = info.get("formats", [])
-                stream_url = info.get("url")
-                
-                if not stream_url and formats:
-                    for f in formats:
-                        if f.get("acodec") != "none":
-                            stream_url = f.get("url")
-                            break
-                            
-                thumbnails = info.get("thumbnails", [])
-                thumbnail_url = info.get("thumbnail")
-                if not thumbnail_url and thumbnails:
-                    thumbnail_url = thumbnails[-1].get("url")
-
                 return {
-                    "id": video_id, "title": info.get("title", "Unknown"),
-                    "duration": info.get("duration", 0), "stream_url": stream_url,
-                    "file_path": cache_manager.get_cached_file(video_id),
+                    "id": info.get("id"),
+                    "title": info.get("title", "Unknown"),
+                    "duration": info.get("duration", 0),
+                    "stream_url": info.get("url"),
+                    "thumbnail": info.get("thumbnail"),
                     "uploader": info.get("uploader", "Unknown"),
-                    "thumbnail": thumbnail_url
+                    "file_path": None
                 }
-            except Exception as e:
-                logger.error(f"Extract error: {e}")
-                return None
-        return await asyncio.to_thread(_extract)
-
-    async def download_media(self, video_id: str, is_video=False) -> str:
-        def _download():
-            try:
-                ydl = self._get_ydl()
-                opts = YDL_OPTS.copy()
-                if is_video:
-                    opts["format"] = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
-                info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=True)
-                return cache_manager.add_to_cache(ydl.prepare_filename(info), video_id, "mp4" if is_video else "mp3")
-            except Exception as e:
-                logger.error(f"Download error: {e}")
-                return None
-        return await asyncio.to_thread(_download)
+            return await asyncio.to_thread(_extract)
+        except Exception as e:
+            logger.error(f"Fallback yt-dlp failed: {e}")
+            return None
 
 downloader = Downloader()
