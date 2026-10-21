@@ -6,62 +6,46 @@ from config.settings import settings
 
 logger = get_logger("Downloader")
 
+NEXGEN_API = "https://api.nexgenbots.xyz"
+
 class Downloader:
     async def search_and_extract(self, query: str, platform="yt"):
-        """Direct best match search using yt-dlp (extract_flat)."""
-        def _search():
-            try:
-                import yt_dlp
-                ydl_opts = {
-                    "quiet": True, 
-                    "extract_flat": True, 
-                    "noplaylist": True,
-                    "extractor_args": {"youtube": {"player_client": ["web"]}} # metadata ke liye web theek hai
-                }
-                ydl = yt_dlp.YoutubeDL(ydl_opts)
-                search_query = query if query.startswith("http") else f"ytsearch1:{query}"
-                info = ydl.extract_info(search_query, download=False)
-                
-                if "entries" in info and info["entries"]:
-                    info = info["entries"][0]
-                
-                return {
-                    "id": info.get("id"),
-                    "title": info.get("title", "Unknown"),
-                    "duration": info.get("duration", 0),
-                    "thumbnail": info.get("thumbnails", [{}])[-1].get("url") if info.get("thumbnails") else info.get("thumbnail"),
-                    "uploader": info.get("uploader", "Unknown")
-                }
-            except Exception as e:
-                logger.error(f"Search failed: {e}")
-                return None
-        return await asyncio.to_thread(_search)
+        # API se direct stream URL fetch karo
+        api_key = getattr(settings, "NEXGEN_API_KEY", None)
+        if not api_key:
+            logger.error("NEXGEN_API_KEY missing! Add it to .env or Render Environment Variables.")
+            return None
 
-    async def get_stream(self, video_id: str):
-        """Get direct stream URL using Cobalt API (Bypasses YouTube block)."""
-        url = f"https://www.youtube.com/watch?v={video_id}"
-        headers = {"Accept": "application/json", "Content-Type": "application/json"}
-        payload = {"url": url, "isAudioOnly": True}
-
-        # Try multiple Cobalt instances
-        cobalt_instances = ["https://api.cobalt.tools/", "https://co.wuk.sh/"]
+        try:
+            async with aiohttp.ClientSession() as session:
+                # API endpoint (Assuming standard structure, adjust if needed)
+                async with session.get(
+                    f"{NEXGEN_API}/stream",
+                    params={"q": query, "api_key": api_key}
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return {
+                            "id": data.get("videoId"),
+                            "title": data.get("title", "Unknown"),
+                            "duration": data.get("duration", 0),
+                            "thumbnail": data.get("thumbnail"),
+                            "stream_url": data.get("url"), # Direct audio stream
+                            "uploader": data.get("author", "Unknown")
+                        }
+                    else:
+                        logger.error(f"API returned status {resp.status}: {await resp.text()}")
+        except Exception as e:
+            logger.error(f"NexGenBots API failed: {e}")
         
-        for base in cobalt_instances:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(base, json=payload, headers=headers, timeout=15) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            if data.get("status") in ["stream", "redirect", "tunnel"]:
-                                return data.get("url")
-            except Exception as e:
-                logger.warning(f"Cobalt instance {base} failed: {e}")
-
-        logger.error(f"All Cobalt instances failed for {video_id}")
         return None
 
+    async def get_stream(self, video_id: str):
+        # Same as search_and_extract, API handles direct ID fetching
+        return await self.search_and_extract(video_id)
+
     async def download_media(self, video_id: str, is_video=False):
-        # Download logic (optional)
+        # Downloads handled by API (for /song command)
         return None
 
 downloader = Downloader()
