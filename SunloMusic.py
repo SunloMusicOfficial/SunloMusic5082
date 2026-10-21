@@ -11,6 +11,7 @@ except ImportError:
     pass
 
 from ftmgram import idle, enums
+from ftmgram.errors import FloodWait
 from config.settings import settings
 from core.bot import app
 from core.userbot import userbot
@@ -67,9 +68,17 @@ async def startup():
     settings.validate()
     
     logger.info("⏳ Starting Bot & Userbot...")
-    # Pehle Bot aur Userbot Start karo taaki Log Group kaam kare
-    await app.start()
-    await userbot.start()
+    try:
+        await app.start()
+        await userbot.start()
+    except FloodWait as e:
+        logger.critical(f"🛑 Telegram FloodWait! Please wait {e.value} seconds before restarting the bot.")
+        logger.critical("Render will restart the bot automatically. Or please suspend the service and wait.")
+        # Exit gracefully so Render doesn't spam loop instantly
+        sys.exit(1)
+    except Exception as e:
+        logger.critical(f"❌ Failed to start clients: {e}")
+        sys.exit(1)
     
     me = await app.get_me()
     user_me = await userbot.get_me()
@@ -81,7 +90,7 @@ async def startup():
         error_msg = f"❌ <b>Database Connection Failed!</b>\n\n<code>{e}</code>\n\n<i>Please check your MONGO_URI in Environment Variables.</i>"
         await send_log(error_msg)
         logger.critical(f"Fatal: Database failed. Exiting...")
-        sys.exit(1) # Exit if DB fails
+        sys.exit(1)
     
     from pytgcalls import PyTgCalls
     calls_module.calls = PyTgCalls(userbot)
