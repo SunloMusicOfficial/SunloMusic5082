@@ -9,19 +9,47 @@ from database.cookies import get_active_cookies, mark_cookie_dead, mark_cookie_s
 
 logger = get_logger("Downloader")
 
-# 🚨 BHAI, YAHAN APNI API KI DETAILS DAALO (Quotes ke andar)
-MY_API_URL = "https://api.shrutibots.in" # Example: https://api.shrutibots.in
-MY_API_KEY = "ShrutiBotssHefroN4fzVuv0DNiUJD" # Example: Shruti_123456
+# 🚨 YAHAN APNI API KEY DAALO (Quotes ke andar)
+MY_API_URL = "https://api.shrutibots.in"
+MY_API_KEY = "YAHAN_APNI_API_KEY_DALO" # Example: "Shruti_123456"
 
 class Downloader:
     async def search_and_extract(self, query: str, platform="yt"):
-        # ── STEP 1: API Call ──
-        if MY_API_URL and MY_API_KEY and "YAHAN" not in MY_API_URL:
-            logger.info(f"🚀 Calling Custom API: {MY_API_URL} for: {query}")
+        video_url = query
+        title = "Unknown"
+        duration = 0
+        thumbnail = None
+
+        # 1. Agar direct link nahi hai, toh yt-dlp se search karo (Yeh Render par block nahi hota)
+        if not query.startswith("http"):
+            logger.info(f"🔍 Searching URL for: {query}")
+            try:
+                ydl_opts = {
+                    "quiet": True,
+                    "extract_flat": True,
+                    "default_search": "ytsearch1",
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(query, download=False)
+                    if "entries" in info and info["entries"]:
+                        info = info["entries"][0]
+                    video_url = f"https://youtube.com/watch?v={info.get('id')}"
+                    title = info.get("title", query)
+                    duration = info.get("duration", 0)
+                    thumbnail = info.get("thumbnail")
+                    logger.info(f"✅ Found YouTube URL: {video_url}")
+            except Exception as e:
+                logger.error(f"❌ Search failed: {e}")
+                return None
+
+        # 2. Apni API ko call karo (Jo Render ke IP block ko bypass karegi)
+        if MY_API_URL and MY_API_KEY and "YAHAN" not in MY_API_KEY:
+            logger.info(f"🚀 Calling API for URL: {video_url}")
             try:
                 async with aiohttp.ClientSession() as session:
-                    payload = {"url": query, "q": query, "api_key": MY_API_KEY}
+                    payload = {"url": video_url, "api_key": MY_API_KEY}
                     
+                    # API call (POST)
                     async with session.post(f"{MY_API_URL.rstrip('/')}/download", json=payload, timeout=20) as resp:
                         response_text = await resp.text()
                         logger.info(f"📥 API Status: {resp.status} | Response: {response_text[:300]}")
@@ -37,13 +65,13 @@ class Downloader:
                                 )
                                 
                                 if stream_url:
-                                    logger.info(f"✅ Found Stream URL from Custom API")
+                                    logger.info(f"✅ Found Stream URL from API")
                                     return {
-                                        "id": data.get("id", query),
-                                        "title": data.get("title", "Unknown"),
-                                        "duration": data.get("duration", 0),
+                                        "id": video_url.split("v=")[-1],
+                                        "title": data.get("title", title),
+                                        "duration": data.get("duration", duration),
                                         "stream_url": stream_url,
-                                        "thumbnail": data.get("thumbnail"),
+                                        "thumbnail": data.get("thumbnail", thumbnail),
                                         "uploader": "Custom API"
                                     }
                                 else:
@@ -53,13 +81,13 @@ class Downloader:
             except Exception as e:
                 logger.error(f"❌ API Connection failed: {e}")
         else:
-            logger.warning("⚠️ API URL ya Key code mein nahi daali gayi hai.")
+            logger.warning("⚠️ API Key code mein nahi daali gayi hai.")
 
-        # ── STEP 2: yt-dlp Fallback ──
+        # 3. Fallback (Agar API down ho)
         logger.info("🔄 Falling back to yt-dlp...")
-        return await self._ytdlp_fallback(query)
+        return await self._ytdlp_fallback(video_url, title, duration, thumbnail)
 
-    async def _ytdlp_fallback(self, query):
+    async def _ytdlp_fallback(self, video_url, title, duration, thumbnail):
         cookies = await get_active_cookies()
         cookie_path = None
         cookie_name = None
@@ -77,7 +105,6 @@ class Downloader:
                     "format": "bestaudio/best",
                     "quiet": True,
                     "noplaylist": True,
-                    "default_search": "ytsearch1",
                     "extractor_args": {"youtube": {"player_client": ["mweb", "web"]}},
                     "socket_timeout": 20,
                 }
@@ -85,15 +112,13 @@ class Downloader:
                     ydl_opts["cookiefile"] = cookie_path
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(query, download=False)
-                    if "entries" in info and info["entries"]:
-                        info = info["entries"][0]
+                    info = ydl.extract_info(video_url, download=False)
                     return {
                         "id": info.get("id"),
-                        "title": info.get("title", "Unknown"),
-                        "duration": info.get("duration", 0),
+                        "title": info.get("title", title),
+                        "duration": info.get("duration", duration),
                         "stream_url": info.get("url"),
-                        "thumbnail": info.get("thumbnail"),
+                        "thumbnail": info.get("thumbnail", thumbnail),
                         "uploader": info.get("uploader", "YouTube"),
                     }
             except Exception as e:
