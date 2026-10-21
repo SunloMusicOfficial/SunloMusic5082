@@ -66,50 +66,41 @@ async def startup():
     clear_old_logs()
     settings.validate()
     
-    logger.info("⏳ Starting Core Services in parallel...")
+    logger.info("⏳ Starting Bot & Userbot...")
+    # Pehle Bot aur Userbot Start karo taaki Log Group kaam kare
+    await app.start()
+    await userbot.start()
     
-    # ── PARALLEL STARTUP ──
-    await asyncio.gather(
-        app.start(),
-        userbot.start(),
-        db.connect()
-    )
-    
-    # Main Bot Details
     me = await app.get_me()
-    logger.info(f"✅ Bot started as @{me.username}")
-    
-    # Assistant Userbot Details
     user_me = await userbot.get_me()
-    logger.info(f"🤖 Assistant started as {user_me.first_name}")
     
-    # Send Assistant Log
+    logger.info("🗄️ Connecting to Database...")
+    try:
+        await db.connect()
+    except Exception as e:
+        error_msg = f"❌ <b>Database Connection Failed!</b>\n\n<code>{e}</code>\n\n<i>Please check your MONGO_URI in Environment Variables.</i>"
+        await send_log(error_msg)
+        logger.critical(f"Fatal: Database failed. Exiting...")
+        sys.exit(1) # Exit if DB fails
+    
+    from pytgcalls import PyTgCalls
+    calls_module.calls = PyTgCalls(userbot)
+    await calls_module.calls.start()
+    
+    logger.info("⏳ Loading Plugins...")
+    plugins = load_plugins()
+    
+    asyncio.create_task(health_monitor(app, userbot))
+    asyncio.create_task(auto_leave_vc())
+    
     await send_log(
         f"🤖 <b>𝐀𝐒𝐒𝐈𝐒𝐓𝐀𝐍𝐓 𝐔𝐒𝐄𝐑𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"👤 <b>Name:</b> {user_me.first_name}\n"
         f"🆔 <b>ID:</b> <code>{user_me.id}</code>\n"
-        f"🎙 <b>Status:</b> <code>Ready for Voice Chat</code>\n"
         f"━━━━━━━━━━━━━━━━━━━━"
     )
     
-    logger.info("🗄️ Database connected successfully")
-    
-    # PyTgCalls Start
-    from pytgcalls import PyTgCalls
-    calls_module.calls = PyTgCalls(userbot)
-    await calls_module.calls.start()
-    logger.info("📞 PyTgCalls voice engine started")
-    
-    # Load Plugins
-    logger.info("⏳ Loading Plugins...")
-    plugins = load_plugins()
-    logger.info(f"🔌 {len(plugins)} plugins loaded successfully")
-    
-    asyncio.create_task(health_monitor(app, userbot))
-    asyncio.create_task(auto_leave_vc())
-    
-    # Send Main Bot Log
     await send_log(
         f"🚀 <b>𝐒𝐔𝐍𝐋𝐎 𝐌𝐔𝐒𝐈𝐂 𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"

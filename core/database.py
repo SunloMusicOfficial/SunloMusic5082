@@ -11,7 +11,7 @@ class Database:
 
     async def connect(self):
         try:
-            self.client = AsyncIOMotorClient(settings.MONGO_URI)
+            self.client = AsyncIOMotorClient(settings.MONGO_URI, serverSelectionTimeoutMS=5000)
             self.db = self.client[settings.DB_NAME]
             # Ping to verify connection
             await self.client.admin.command('ping')
