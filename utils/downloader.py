@@ -6,16 +6,17 @@ from config.settings import settings
 
 logger = get_logger("Downloader")
 
-# Internal API Endpoint
 SUNLO_API_URL = "https://api.nexgenbots.xyz"
 
 class Downloader:
     async def search_and_extract(self, query: str, platform="yt"):
-        api_key = getattr(settings, "SUNLO_API_KEY", None)
+        api_key = settings.SUNLO_API_KEY
         
         if not api_key:
-            logger.error("SUNLO_API_KEY missing! Please contact the Owner to get the SunloMusicApi Key.")
+            logger.error("SUNLO_API_KEY missing! Please contact the Owner.")
             return None
+        
+        logger.info(f"✅ Using SunloMusicApi for: {query}")
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -34,9 +35,9 @@ class Downloader:
                             "uploader": data.get("author", "Unknown")
                         }
                     else:
-                        logger.error(f"SunloMusicApi returned status {resp.status}")
+                        logger.error(f"SunloMusicApi error: HTTP {resp.status}")
         except Exception as e:
-            logger.error(f"SunloMusicApi failed: {e}")
+            logger.error(f"SunloMusicApi Connection failed: {e}")
         
         return None
 

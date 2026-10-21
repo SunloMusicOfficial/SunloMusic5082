@@ -24,9 +24,14 @@ class Settings:
     SUPPORT_CHANNEL = os.getenv("SUPPORT_CHANNEL", "")
     SUPPORT_CHAT = os.getenv("SUPPORT_CHAT", "")
     LOG_CHANNEL = int(os.getenv("LOG_CHANNEL", 0))
-    
-    # 🔥 YAHAN FIX HUA HAI (Log Group ID)
     LOG_GROUP_ID = int(os.getenv("LOG_GROUP_ID", 0))
+    
+    # API Keys (Cleaned up to remove spaces)
+    SUNLO_API_KEY = os.getenv("SUNLO_API_KEY", "").strip()
+    AUDD_API_KEY = os.getenv("AUDD_API_KEY", "").strip()
+    
+    # Render Self-Ping URL
+    RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip()
 
     # Performance
     CACHE_DIR = os.getenv("CACHE_DIR", "cache")
@@ -34,16 +39,8 @@ class Settings:
     PRELOAD_NEXT = os.getenv("PRELOAD_NEXT", "True").lower() == "true"
     DOWNLOAD_WORKERS = int(os.getenv("DOWNLOAD_WORKERS", 4))
     START_IMG_URL = os.getenv("START_IMG_URL", "")
-
-    # Playback
     DEFAULT_VOLUME = int(os.getenv("DEFAULT_VOLUME", 100))
-    DEFAULT_QUALITY = os.getenv("DEFAULT_QUALITY", "high")
-
-    # Limits
     MAX_QUEUE_SIZE = int(os.getenv("MAX_QUEUE_SIZE", 50))
-    MAX_SONG_DURATION_SEC = int(os.getenv("MAX_SONG_DURATION_SEC", 3600))
-
-    # Logging
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
     @classmethod

@@ -20,6 +20,7 @@ from core.database import db
 from core.health import health_monitor
 from utils.logger import get_logger
 from utils.log_cleaner import clear_old_logs
+from utils.keep_alive import self_ping
 from plugins.queue import current_songs
 
 logger = get_logger("SunloMusic")
@@ -72,12 +73,10 @@ async def startup():
         await app.start()
         await userbot.start()
     except FloodWait as e:
-        logger.critical(f"🛑 Telegram FloodWait! Please wait {e.value} seconds before restarting the bot.")
-        logger.critical("Render will restart the bot automatically. Or please suspend the service and wait.")
-        # Exit gracefully so Render doesn't spam loop instantly
+        logger.critical(f"🛑 FloodWait: Please wait {e.value} seconds.")
         sys.exit(1)
     except Exception as e:
-        logger.critical(f"❌ Failed to start clients: {e}")
+        logger.critical(f"❌ Failed to start: {e}")
         sys.exit(1)
     
     me = await app.get_me()
@@ -87,9 +86,8 @@ async def startup():
     try:
         await db.connect()
     except Exception as e:
-        error_msg = f"❌ <b>Database Connection Failed!</b>\n\n<code>{e}</code>\n\n<i>Please check your MONGO_URI in Environment Variables.</i>"
-        await send_log(error_msg)
-        logger.critical(f"Fatal: Database failed. Exiting...")
+        await send_log(f"❌ <b>Database Connection Failed!</b>\n<code>{e}</code>")
+        logger.critical(f"Fatal: Database failed.")
         sys.exit(1)
     
     from pytgcalls import PyTgCalls
@@ -99,26 +97,23 @@ async def startup():
     logger.info("⏳ Loading Plugins...")
     plugins = load_plugins()
     
+    # Start Background Tasks
     asyncio.create_task(health_monitor(app, userbot))
     asyncio.create_task(auto_leave_vc())
+    asyncio.create_task(self_ping(app)) # 🔥 Start Self-Ping
     
     await send_log(
         f"🤖 <b>𝐀𝐒𝐒𝐈𝐒𝐓𝐀𝐍𝐓 𝐔𝐒𝐄𝐑𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
         f"👤 <b>Name:</b> {user_me.first_name}\n"
-        f"🆔 <b>ID:</b> <code>{user_me.id}</code>\n"
-        f"━━━━━━━━━━━━━━━━━━━━"
+        f"🆔 <b>ID:</b> <code>{user_me.id}</code>"
     )
     
     await send_log(
         f"🚀 <b>𝐒𝐔𝐍𝐋𝐎 𝐌𝐔𝐒𝐈𝐂 𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🤖 <b>Bot:</b> @{me.username}\n"
         f"⚙️ <b>Plugins:</b> <code>{len(plugins)} Loaded</code>\n"
         f"🗄 <b>Database:</b> <code>Connected</code>\n"
-        f"🎙 <b>Voice Engine:</b> <code>Active</code>\n"
-        f"⚡ <b>Status:</b> <code>Online & Fast</code>\n"
-        f"━━━━━━━━━━━━━━━━━━━━"
+        f"🎙 <b>Voice Engine:</b> <code>Active</code>"
     )
     
     logger.info("🚀 Sunlo Music is ready to rock!")
