@@ -7,52 +7,36 @@ from config.settings import settings
 
 logger = get_logger("KeepAlive")
 
+# 🔥 AAPKA SNAPDEPLOY URL (Ping ke liye)
+SUNLO_CUSTOM_API = "https://cobalt-658d8.containers.snapdeploy.app"
+
 async def self_ping(app):
-    url = settings.RENDER_EXTERNAL_URL
+    render_url = settings.RENDER_EXTERNAL_URL
     
-    if not url:
+    if not render_url:
         logger.warning("⚠️ RENDER_EXTERNAL_URL not found. Self-ping disabled.")
         return
 
-    logger.info(f"💓 Keep-Alive active. Target: {url}")
+    logger.info(f"💓 Keep-Alive active for Render & Cobalt API")
     
-    if settings.LOG_GROUP_ID != 0:
-        try:
-            await app.send_message(settings.LOG_GROUP_ID, 
-                f"💓 <b>𝐊𝐄𝐄𝐏-𝐀𝐋𝐈𝐕𝐄 𝐀𝐂𝐓𝐈𝐕𝐄</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"🌐 <b>Target:</b> <code>{url}</code>\n"
-                f"⏱ <b>Interval:</b> <code>Every 10 Minutes</code>\n"
-                f"━━━━━━━━━━━━━━━━━━━━", parse_mode=enums.ParseMode.HTML)
-        except Exception as e:
-            logger.error(f"Failed to send startup ping log: {e}")
-
     async with aiohttp.ClientSession() as session:
         while True:
-            start_time = time.time()
+            # 1. Render Ko Ping Karo (Bot ko zinda rakhne ke liye)
             try:
-                async with session.get(url, timeout=15) as resp:
-                    latency = round((time.time() - start_time) * 1000, 2)
-                    status_text = "✅ <b>𝐏𝐈𝐍𝐆 𝐒𝐔𝐂𝐂𝐄𝐒𝐒</b>" if resp.status == 200 else f"⚠️ <b>𝐖𝐀𝐑𝐍𝐈𝐍𝐆: {resp.status}</b>"
-                    
-                    logger.info(f"Self-ping: {resp.status} ({latency}ms)")
-                    
-                    if settings.LOG_GROUP_ID != 0:
-                        try:
-                            await app.send_message(settings.LOG_GROUP_ID,
-                                f"{status_text}\n"
-                                f"📡 <b>Response:</b> <code>{resp.status}</code>\n"
-                                f"⚡ <b>Latency:</b> <code>{latency} ms</code>\n"
-                                f"🟢 <b>Status:</b> <code>Bot is Awake</code>", parse_mode=enums.ParseMode.HTML)
-                        except: pass
+                async with session.get(render_url, timeout=15) as resp:
+                    if resp.status == 200:
+                        logger.info(f"✅ Render Ping Success")
             except Exception as e:
-                logger.error(f"Self-ping failed: {e}")
-                if settings.LOG_GROUP_ID != 0:
-                    try:
-                        await app.send_message(settings.LOG_GROUP_ID,
-                            f"🚨 <b>𝐏𝐈𝐍𝐆 𝐅𝐀𝐈𝐋𝐄𝐃</b> 🚨\n"
-                            f"❌ <b>Error:</b> <code>{str(e)[:50]}</code>\n"
-                            f"🔴 <b>Action:</b> <i>Render might be down!</i>", parse_mode=enums.ParseMode.HTML)
-                    except: pass
+                logger.error(f"❌ Render Ping Failed: {e}")
+
+            # 2. SnapDeploy Cobalt Ko Ping Karo (API ko sone se rokne ke liye)
+            try:
+                # Root URL check karne se container wake rehta hai
+                async with session.get(SUNLO_CUSTOM_API, timeout=15) as resp:
+                    if resp.status == 200:
+                        logger.info(f"✅ Cobalt API Ping Success (Awake)")
+            except Exception as e:
+                logger.warning(f"⚠️ Cobalt API Ping Failed: {e}")
             
-            await asyncio.sleep(600) # 10 Minutes
+            # 10 minute wait
+            await asyncio.sleep(600)
