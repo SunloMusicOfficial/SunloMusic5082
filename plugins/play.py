@@ -75,27 +75,23 @@ async def play_handler(client, message):
     m = await client.send_message(message.chat.id, "🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
     
     song = await downloader.search_and_extract(query)
-    if not song:
-        return await m.edit_text("❌ <b>ɴᴏ ʀᴇꜱᴜʟᴛꜱ ꜰᴏᴜɴᴅ!</b>\n<i>API down or Video unavailable.</i>", parse_mode=enums.ParseMode.HTML)
-
-    await play_song_by_id(client, message, m, song['id'], is_video)
-
-async def play_song_by_id(client, message, m, video_id, is_video=False):
-    song = await downloader.get_stream(video_id)
-    if not song: 
-        return await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n<i>Could not extract stream URL.</i>", parse_mode=enums.ParseMode.HTML)
     
+    if not song or not song.get("stream_url"):
+        return await m.edit_text(
+            "❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n"
+            "Could not extract stream URL.\n\n"
+            "📋 <i>Check Render logs for exact API response.</i>", 
+            parse_mode=enums.ParseMode.HTML
+        )
+
+    await play_song_by_id(client, message, m, song, is_video)
+
+async def play_song_by_id(client, message, m, song, is_video=False):
     await increment_play_count(song.get('title', 'Unknown'))
     if hasattr(message, 'from_user') and message.from_user:
         await increment_user_plays(message.from_user.id)
     
     chat_id = message.chat.id
-    from plugins.music_extras import history_db
-    if chat_id not in history_db: history_db[chat_id] = []
-    if song.get('title') not in history_db[chat_id]:
-        history_db[chat_id].append(song.get('title'))
-        if len(history_db[chat_id]) > 20: history_db[chat_id].pop(0)
-
     active_calls = await calls_module.calls.calls
     dur_str = get_time_str(song.get('duration', 0))
     title_short = song.get('title', 'Unknown')[:35] + "..." if len(song.get('title', 'Unknown')) > 35 else song.get('title', 'Unknown')
