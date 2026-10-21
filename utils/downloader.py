@@ -12,25 +12,22 @@ logger = get_logger("Downloader")
 class Downloader:
     async def search_and_extract(self, query: str, platform="yt"):
         # ── STEP 1: API Call ──
-        api_url = getattr(settings, "SUNLO_DOWNLOAD_API_URL", "")
-        api_key = getattr(settings, "SUNLO_DOWNLOAD_API_KEY", "")
+        api_url = settings.SUNLO_DOWNLOAD_API_URL
+        api_key = settings.SUNLO_DOWNLOAD_API_KEY
 
         if api_url and api_key:
+            print(f"🚀 [DEBUG] Calling API: {api_url} with query: {query}") # Debug Print
             try:
-                logger.info(f"📡 Calling Download API for: {query}")
                 async with aiohttp.ClientSession() as session:
-                    # API ke hisaab se parameters (url & query dono bhej rahe hain)
                     payload = {"url": query, "q": query, "api_key": api_key}
                     
-                    # Try POST first
                     async with session.post(f"{api_url}/download", json=payload, timeout=20) as resp:
                         response_text = await resp.text()
-                        logger.info(f"📥 API Response ({resp.status}): {response_text[:500]}")
+                        print(f"📥 [DEBUG] API Status: {resp.status} | Response: {response_text[:300]}")
                         
                         if resp.status == 200:
                             try:
                                 data = await resp.json()
-                                # 🔥 Universal Parser: Har key check kar raha hai
                                 stream_url = (
                                     data.get("url") or data.get("link") or 
                                     data.get("download_url") or data.get("downloadUrl") or
@@ -39,24 +36,26 @@ class Downloader:
                                 )
                                 
                                 if stream_url:
-                                    logger.info("✅ Stream URL found in API response!")
+                                    print(f"✅ [DEBUG] Found Stream URL: {stream_url[:50]}...")
                                     return {
                                         "id": data.get("id", query),
                                         "title": data.get("title", "Unknown"),
                                         "duration": data.get("duration", 0),
                                         "stream_url": stream_url,
                                         "thumbnail": data.get("thumbnail"),
-                                        "uploader": "Custom API"
+                                        "uploader": "API"
                                     }
                                 else:
-                                    logger.error("⚠️ API returned 200 but could not find URL in JSON.")
+                                    print("❌ [DEBUG] API returned 200 but URL not found in JSON.")
                             except Exception as e:
-                                logger.error(f"Failed to parse JSON: {e}")
+                                print(f"❌ [DEBUG] Failed to parse JSON: {e}")
             except Exception as e:
-                logger.error(f"❌ Connection to API failed: {e}")
+                print(f"❌ [DEBUG] API Connection failed: {e}")
+        else:
+            print("⚠️ [DEBUG] API URL or Key is missing in Environment Variables.")
 
-        # ── STEP 2: yt-dlp Fallback (Agar API fail ho jaye) ──
-        logger.info("🔄 API failed or bypassed, trying yt-dlp fallback...")
+        # ── STEP 2: yt-dlp Fallback ──
+        print("🔄 [DEBUG] Falling back to yt-dlp...")
         return await self._ytdlp_fallback(query)
 
     async def _ytdlp_fallback(self, query):
@@ -97,7 +96,7 @@ class Downloader:
                         "uploader": info.get("uploader", "YouTube"),
                     }
             except Exception as e:
-                logger.error(f"yt-dlp fallback failed: {e}")
+                print(f"❌ [DEBUG] yt-dlp failed: {e}")
                 return None
 
         result = await asyncio.to_thread(_extract)
