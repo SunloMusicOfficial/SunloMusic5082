@@ -19,7 +19,10 @@ class Settings:
     LOG_CHANNEL = int(os.getenv("LOG_CHANNEL", 0))
     LOG_GROUP_ID = int(os.getenv("LOG_GROUP_ID", 0))
     
-    # 🔥 API VARIABLES (Jo Render me add hain)
+    # 🔥 FIX: RENDER EXTERNAL URL ADDED
+    RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip()
+    
+    # 🔥 API VARIABLES
     SUNLO_DOWNLOAD_API_KEY = os.getenv("SUNLO_DOWNLOAD_API_KEY", "").strip()
     SUNLO_DOWNLOAD_API_URL = os.getenv("SUNLO_DOWNLOAD_API_URL", "").strip().rstrip("/")
     AUDD_API_KEY = os.getenv("AUDD_API_KEY", "").strip()

@@ -16,14 +16,14 @@ class Downloader:
         api_key = settings.SUNLO_DOWNLOAD_API_KEY
 
         if api_url and api_key:
-            print(f"🚀 [DEBUG] Calling API: {api_url} with query: {query}") # Debug Print
+            logger.info(f"🚀 Calling API: {api_url} with query: {query}")
             try:
                 async with aiohttp.ClientSession() as session:
                     payload = {"url": query, "q": query, "api_key": api_key}
                     
                     async with session.post(f"{api_url}/download", json=payload, timeout=20) as resp:
                         response_text = await resp.text()
-                        print(f"📥 [DEBUG] API Status: {resp.status} | Response: {response_text[:300]}")
+                        logger.info(f"📥 API Status: {resp.status} | Response: {response_text[:300]}")
                         
                         if resp.status == 200:
                             try:
@@ -36,26 +36,26 @@ class Downloader:
                                 )
                                 
                                 if stream_url:
-                                    print(f"✅ [DEBUG] Found Stream URL: {stream_url[:50]}...")
+                                    logger.info(f"✅ Found Stream URL from API")
                                     return {
                                         "id": data.get("id", query),
                                         "title": data.get("title", "Unknown"),
                                         "duration": data.get("duration", 0),
                                         "stream_url": stream_url,
                                         "thumbnail": data.get("thumbnail"),
-                                        "uploader": "API"
+                                        "uploader": "Custom API"
                                     }
                                 else:
-                                    print("❌ [DEBUG] API returned 200 but URL not found in JSON.")
+                                    logger.error("❌ API returned 200 but URL not found in JSON.")
                             except Exception as e:
-                                print(f"❌ [DEBUG] Failed to parse JSON: {e}")
+                                logger.error(f"❌ Failed to parse JSON: {e}")
             except Exception as e:
-                print(f"❌ [DEBUG] API Connection failed: {e}")
+                logger.error(f"❌ API Connection failed: {e}")
         else:
-            print("⚠️ [DEBUG] API URL or Key is missing in Environment Variables.")
+            logger.warning("⚠️ API URL or Key is missing in Environment Variables.")
 
         # ── STEP 2: yt-dlp Fallback ──
-        print("🔄 [DEBUG] Falling back to yt-dlp...")
+        logger.info("🔄 Falling back to yt-dlp...")
         return await self._ytdlp_fallback(query)
 
     async def _ytdlp_fallback(self, query):
@@ -96,7 +96,7 @@ class Downloader:
                         "uploader": info.get("uploader", "YouTube"),
                     }
             except Exception as e:
-                print(f"❌ [DEBUG] yt-dlp failed: {e}")
+                logger.error(f"❌ yt-dlp failed: {e}")
                 return None
 
         result = await asyncio.to_thread(_extract)
