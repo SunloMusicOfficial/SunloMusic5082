@@ -1,17 +1,14 @@
 import json
 import re
+import os
 from ftmgram import filters, enums
 from core.bot import app
 from config.settings import settings
 from database.cookies import add_cookie
-from utils.logger import get_logger
-
-logger = get_logger("RawCookie")
 
 def json_to_netscape(json_data):
     lines = ["# Netscape HTTP Cookie File"]
     cookies_list = json_data.get("cookies", []) if isinstance(json_data, dict) else json_data
-    
     for cookie in cookies_list:
         domain = cookie.get("domain", ".youtube.com")
         flag = "TRUE" if domain.startswith(".") else "FALSE"
@@ -25,27 +22,36 @@ def json_to_netscape(json_data):
 
 @app.on_message(filters.command("setjsoncookie") & filters.user(settings.OWNER_ID))
 async def set_json_cookie(client, message):
-    # Reply se data uthao ya direct command se
-    if message.reply_to_message and message.reply_to_message.text:
-        raw_text = message.reply_to_message.text
-    elif len(message.command) > 2:
-        raw_text = message.text.split(None, 2)[2]
-    else:
+    # Check if replied to a text or document
+    reply = message.reply_to_message
+    
+    if not reply or (not reply.text and not reply.document):
         return await message.reply_text(
-            "🍪 **Usage:** Kisi JSON message par reply karke `/setjsoncookie <name>` likhein.\n"
-            "Ya direct: `/setjsoncookie <name> {json_here}`"
+            "🍪 **Usage:**\n"
+            "1. Ek `.json` ya `.txt` file bhejo jisme cookies ho.\n"
+            "2. Us file par reply karke `/setjsoncookie <name>` likho.\n"
+            "Example: `/setjsoncookie account1`"
         )
 
-    # Account name nikaalo
     name = message.command[1].lower() if len(message.command) > 1 else "acc1"
-    
-    m = await message.reply_text(f"⏳ **Parsing JSON & saving cookies for `{name}`...**")
+    m = await message.reply_text(f"⏳ **Processing cookies for `{name}`...**")
 
     try:
-        # JSON fix karo (kabhi kabhi mobile copy mein extra characters aate hain)
+        raw_text = ""
+        # If it's a document (file)
+        if reply.document:
+            file_path = await client.download_media(reply.document)
+            with open(file_path, "r", encoding="utf-8") as f:
+                raw_text = f.read()
+            os.remove(file_path)
+        # If it's text
+        else:
+            raw_text = reply.text
+
+        # Clean JSON if extra characters exist
         raw_text = raw_text.strip()
-        if not raw_text.startswith("{"):
-            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        if not raw_text.startswith("{") and not raw_text.startswith("["):
+            match = re.search(r'(\{.*\}|\[.*\])', raw_text, re.DOTALL)
             if match:
                 raw_text = match.group(0)
 
@@ -53,8 +59,8 @@ async def set_json_cookie(client, message):
         netscape_data = json_to_netscape(data)
         await add_cookie(name, netscape_data)
         
-        await m.edit_text(f"✅ **Cookies for `{name}` saved successfully!**\n\nAb aap `/play` chala kar test kar sakte ho.")
+        await m.edit_text(f"✅ **Cookies for `{name}` saved successfully!**\nAb aap `/play` chala kar test kar sakte ho.")
     except json.JSONDecodeError:
-        await m.edit_text("❌ **Invalid JSON format!** Make sure you copied the full JSON string.")
+        await m.edit_text("❌ **Invalid JSON format!** File ke andar valid JSON hona chahiye.")
     except Exception as e:
         await m.edit_text(f"❌ **Error:** {e}")
