@@ -4,6 +4,7 @@ py-tgcalls>=2.1.0
 motor>=3.4.0
 python-dotenv
 yt-dlp
+yukiapi
 ffmpeg-python
 aiohttp
 aiofiles
@@ -23,3 +24,4 @@ SpeechRecognition
 audd
 flask
 gunicorn
+cryptography
