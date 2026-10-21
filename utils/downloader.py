@@ -1,136 +1,106 @@
 import asyncio
-from yukiapi import YukiAPI
+import aiohttp
 from utils.logger import get_logger
 from utils.cache import cache_manager
 from config.settings import settings
 
 logger = get_logger("Downloader")
 
+# Piped API instances (fallback ke liye)
+PIPED_INSTANCES = [
+    "https://pipedapi.kavin.rocks",
+    "https://pipedapi.adminforge.de",
+    "https://api.piped.private.coffee",
+    "https://pipedapi.reallyaweso.me"
+]
+
 class Downloader:
+    async def _fetch_piped(self, endpoint: str):
+        """Try multiple Piped instances until one works."""
+        for base in PIPED_INSTANCES:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(f"{base}{endpoint}", timeout=10) as resp:
+                        if resp.status == 200:
+                            return await resp.json()
+            except Exception as e:
+                logger.warning(f"Piped instance {base} failed: {e}")
+                continue
+        return None
+
     async def search_multiple(self, query: str, limit=5):
-        """Search top X results for the interactive UI."""
+        """Search top X results using Piped API."""
         try:
-            async with YukiAPI() as yuki:
-                results = await yuki.search(query, limit=limit)
-                parsed_results = []
-                for res in results:
-                    parsed_results.append({
-                        "id": res.get("id"),
-                        "title": res.get("title", "Unknown"),
-                        "duration": res.get("duration", 0),
-                        "uploader": res.get("uploader", "Unknown"),
-                        "thumbnail": res.get("thumbnail")
-                    })
-                return parsed_results
+            data = await self._fetch_piped(f"/search?q={query}&filter=music_songs")
+            if not data or "items" not in data:
+                return []
+
+            results = []
+            for item in data["items"][:limit]:
+                results.append({
+                    "id": item.get("url", "").replace("/watch?v=", ""),
+                    "title": item.get("title", "Unknown"),
+                    "duration": item.get("duration", 0),
+                    "uploader": item.get("uploaderName", "Unknown"),
+                    "thumbnail": item.get("thumbnail")
+                })
+            return results
         except Exception as e:
-            logger.error(f"YukiAPI search_multiple failed: {e}")
-            # Fallback: yt-dlp
-            return await self._fallback_search_multiple(query, limit)
+            logger.error(f"Piped search failed: {e}")
+            return []
 
     async def get_stream(self, video_id: str):
-        """Get direct stream URL by video ID."""
+        """Get direct stream URL from Piped API."""
         try:
-            async with YukiAPI() as yuki:
-                # YukiAPI can take video_id or URL
-                stream_url = await yuki.get_stream(video_id, type="audio")
-                # Details nikalne ke liye
-                title, dur_min, dur_sec, thumb, vidid = await yuki.details(video_id)
-                duration = (int(dur_min) * 60) + int(dur_sec)
-                
-                return {
-                    "id": vidid,
-                    "title": title,
-                    "duration": duration,
-                    "stream_url": stream_url,
-                    "thumbnail": thumb,
-                    "uploader": "YukiAPI",
-                    "file_path": cache_manager.get_cached_file(vidid)
-                }
+            data = await self._fetch_piped(f"/streams/{video_id}")
+            if not data or "audioStreams" not in data:
+                return None
+
+            # Best audio stream chuno
+            audio_streams = data.get("audioStreams", [])
+            best_audio = None
+            for stream in audio_streams:
+                if stream.get("mimeType", "").startswith("audio"):
+                    best_audio = stream
+                    break
+
+            if not best_audio:
+                return None
+
+            return {
+                "id": video_id,
+                "title": data.get("title", "Unknown"),
+                "duration": data.get("duration", 0),
+                "stream_url": best_audio.get("url"),
+                "thumbnail": data.get("thumbnailUrl"),
+                "uploader": data.get("uploader", "Unknown"),
+                "file_path": cache_manager.get_cached_file(video_id)
+            }
         except Exception as e:
-            logger.error(f"YukiAPI get_stream failed: {e}")
-            return await self._fallback_get_stream(video_id)
+            logger.error(f"Piped get_stream failed: {e}")
+            return None
 
     async def search_and_extract(self, query: str, platform="yt"):
-        # Compatibility method for older code
         results = await self.search_multiple(query, limit=1)
         if results:
             return await self.get_stream(results[0]["id"])
         return None
 
     async def download_media(self, video_id: str, is_video=False):
+        """Piped se download karne ke liye (optional)."""
         try:
-            async with YukiAPI() as yuki:
-                file_path = await yuki.download(
-                    video_id,
-                    type="video" if is_video else "audio",
-                    output_dir=settings.CACHE_DIR
-                )
-                return file_path
-        except Exception as e:
-            logger.error(f"YukiAPI download failed: {e}")
-            return None
-
-    # ── FALLBACK METHODS (Using yt-dlp) ──
-    async def _fallback_search_multiple(self, query: str, limit=5):
-        try:
+            # Piped API directly download support nahi karta, isliye yt-dlp fallback
             import yt_dlp
-            YDL_OPTS = {
-                "format": "bestaudio/best",
+            ydl_opts = {
+                "format": "bestaudio/best" if not is_video else "best[ext=mp4]/best",
                 "quiet": True,
-                "noplaylist": True,
-                "geo_bypass": True,
-                "nocheckcertificate": True,
-                "extractor_args": {"youtube": {"player_client": ["android_vr"]}},
-                "js_runtimes": {"node": {}},
-                "remote_components": ["ejs:github"],
+                "outtmpl": f"{settings.CACHE_DIR}/%(id)s.%(ext)s",
             }
-            def _extract():
-                ydl = yt_dlp.YoutubeDL(YDL_OPTS)
-                info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
-                results = []
-                if "entries" in info:
-                    for entry in info["entries"]:
-                        results.append({
-                            "id": entry.get("id"),
-                            "title": entry.get("title", "Unknown"),
-                            "duration": entry.get("duration", 0),
-                            "uploader": entry.get("uploader", "Unknown"),
-                            "thumbnail": entry.get("thumbnail")
-                        })
-                return results
-            return await asyncio.to_thread(_extract)
+            ydl = yt_dlp.YoutubeDL(ydl_opts)
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=True)
+            return cache_manager.add_to_cache(ydl.prepare_filename(info), video_id, "mp4" if is_video else "mp3")
         except Exception as e:
-            logger.error(f"Fallback search_multiple failed: {e}")
-            return []
-
-    async def _fallback_get_stream(self, video_id: str):
-        try:
-            import yt_dlp
-            YDL_OPTS = {
-                "format": "bestaudio/best",
-                "quiet": True,
-                "noplaylist": True,
-                "geo_bypass": True,
-                "nocheckcertificate": True,
-                "extractor_args": {"youtube": {"player_client": ["android_vr"]}},
-                "js_runtimes": {"node": {}},
-                "remote_components": ["ejs:github"],
-            }
-            def _extract():
-                ydl = yt_dlp.YoutubeDL(YDL_OPTS)
-                info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
-                return {
-                    "id": info.get("id"),
-                    "title": info.get("title", "Unknown"),
-                    "duration": info.get("duration", 0),
-                    "stream_url": info.get("url"),
-                    "thumbnail": info.get("thumbnail"),
-                    "uploader": info.get("uploader", "Unknown"),
-                    "file_path": None
-                }
-            return await asyncio.to_thread(_extract)
-        except Exception as e:
-            logger.error(f"Fallback get_stream failed: {e}")
+            logger.error(f"Download failed: {e}")
             return None
 
 downloader = Downloader()
