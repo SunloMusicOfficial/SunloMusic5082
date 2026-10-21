@@ -1,7 +1,7 @@
 import asyncio
 import aiohttp
+import yt_dlp
 from utils.logger import get_logger
-from utils.cache import cache_manager
 from config.settings import settings
 
 logger = get_logger("Downloader")
@@ -10,15 +10,15 @@ SUNLO_API_URL = "https://api.nexgenbots.xyz"
 
 class Downloader:
     async def search_and_extract(self, query: str, platform="yt"):
+        # 1. Try SunloMusicApi
         api_key = settings.SUNLO_API_KEY
-        
-        # 1. Try SunloMusicApi (NexGenBots)
         if api_key:
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
                         f"{SUNLO_API_URL}/stream",
-                        params={"q": query, "api_key": api_key}
+                        params={"q": query, "api_key": api_key},
+                        timeout=10
                     ) as resp:
                         if resp.status == 200:
                             data = await resp.json()
@@ -32,34 +32,40 @@ class Downloader:
                                     "stream_url": data.get("url"),
                                     "uploader": data.get("author", "Unknown")
                                 }
-                        logger.warning(f"⚠️ SunloMusicApi status {resp.status}. Falling back...")
+                            else:
+                                logger.error(f"⚠️ API 200 OK but no URL. Response: {data}")
+                        else:
+                            logger.error(f"⚠️ API Error {resp.status}: {await resp.text()}")
             except Exception as e:
-                logger.warning(f"⚠️ SunloMusicApi failed: {e}. Falling back...")
-        
-        # 2. Fallback to yt-dlp
+                logger.error(f"⚠️ SunloMusicApi failed: {e}")
+
+        # 2. Fallback to yt-dlp with iOS Client (Bypasses Render IP block)
+        logger.info("🔄 Trying yt-dlp fallback with iOS client...")
         return await self._fallback_search(query)
 
     async def _fallback_search(self, query: str):
         def _extract():
             try:
-                import yt_dlp
                 ydl_opts = {
                     "format": "bestaudio/best",
-                    "quiet": True, 
-                    "noplaylist": True, 
-                    "geo_bypass": True, 
+                    "quiet": True,
+                    "noplaylist": True,
+                    "geo_bypass": True,
                     "nocheckcertificate": True,
-                    "extractor_args": {"youtube": {"player_client": ["android_vr"]}},
-                    "js_runtimes": {"node": {}},
-                    "remote_components": ["ejs:github"],
-                    "default_search": "ytsearch1"
+                    "default_search": "ytsearch1",
+                    "extractor_args": {
+                        "youtube": {
+                            "player_client": ["ios", "android"], # iOS is best for bypassing blocks
+                            "skip": ["hls", "dash"]
+                        }
+                    }
                 }
                 ydl = yt_dlp.YoutubeDL(ydl_opts)
                 info = ydl.extract_info(query, download=False)
                 
                 if "entries" in info and info["entries"]:
                     info = info["entries"][0]
-                    
+
                 return {
                     "id": info.get("id"),
                     "title": info.get("title", "Unknown"),
@@ -70,7 +76,7 @@ class Downloader:
                     "file_path": None
                 }
             except Exception as e:
-                logger.error(f"yt-dlp fallback failed: {e}")
+                logger.error(f"❌ yt-dlp fallback failed: {e}")
                 return None
         return await asyncio.to_thread(_extract)
 
