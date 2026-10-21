@@ -16,7 +16,6 @@ from utils.logger import get_logger
 logger = get_logger("PlayPlugin")
 playback_start_times = {}
 live_timer_tasks = {}
-search_cache = {} 
 
 def get_time_str(sec):
     m, s = divmod(int(sec), 60)
@@ -76,49 +75,49 @@ async def play_handler(client, message):
     query = " ".join(message.command[1:])
     m = await client.send_message(message.chat.id, "🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
     
-    if query.startswith("http"):
-        await play_song_by_id(client, message, m, query, is_video)
-    else:
-        results = await downloader.search_multiple(query, limit=5)
-        if not results: return await m.edit_text("❌ <b>ɴᴏ ʀᴇꜱᴜʟᴛꜱ ꜰᴏᴜɴᴅ!</b>", parse_mode=enums.ParseMode.HTML)
-        search_cache[message.from_user.id] = results
-        buttons = [[InlineKeyboardButton(f"{i+1}. {res['title'][:35]}", callback_data=f"play_res_{i}_{message.from_user.id}_{'v' if is_video else 'a'}")] for i, res in enumerate(results)]
-        await m.edit_text(f"🔎 <b>𝐒𝐞𝐥𝐞𝐜𝐭 𝐚 {'𝐯𝐢𝐝𝐞𝐨' if is_video else '𝐬𝐨𝐧𝐠'}:</b>", reply_markup=InlineKeyboardMarkup(buttons), parse_mode=enums.ParseMode.HTML)
+    # 🔥 DIRECT PLAY: No multiple options
+    song = await downloader.search_and_extract(query)
+    if not song:
+        return await m.edit_text("❌ <b>ɴᴏ ʀᴇꜱᴜʟᴛꜱ ꜰᴏᴜɴᴅ!</b>", parse_mode=enums.ParseMode.HTML)
+
+    await play_song_by_id(client, message, m, song['id'], is_video)
 
 async def play_song_by_id(client, message, m, video_id, is_video=False):
-    song = await downloader.get_stream(video_id)
-    if not song: return await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ.</b>")
+    stream_url = await downloader.get_stream(video_id)
+    if not stream_url: 
+        return await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n<i>YouTube block or API issue.</i>", parse_mode=enums.ParseMode.HTML)
     
-    # ── STATS UPDATES ──
-    await increment_play_count(song['title'])
+    # Get metadata
+    song = await downloader.search_and_extract(video_id)
+    if not song:
+        song = {"id": video_id, "title": "Unknown Track", "duration": 0, "thumbnail": None}
+    
+    await increment_play_count(song.get('title', 'Unknown'))
     if hasattr(message, 'from_user') and message.from_user:
         await increment_user_plays(message.from_user.id)
     
     chat_id = message.chat.id
-    
-    # ── HISTORY TRACKING (Fixed integration) ──
     from plugins.music_extras import history_db
     if chat_id not in history_db: history_db[chat_id] = []
-    if song['title'] not in history_db[chat_id]:
-        history_db[chat_id].append(song['title'])
+    if song.get('title') not in history_db[chat_id]:
+        history_db[chat_id].append(song.get('title'))
         if len(history_db[chat_id]) > 20: history_db[chat_id].pop(0)
 
     active_calls = await calls_module.calls.calls
-    dur_str = get_time_str(song['duration'])
-    title_short = song['title'][:35] + "..." if len(song['title']) > 35 else song['title']
+    dur_str = get_time_str(song.get('duration', 0))
+    title_short = song.get('title', 'Unknown')[:35] + "..." if len(song.get('title', 'Unknown')) > 35 else song.get('title', 'Unknown')
 
     requester = message.from_user.mention if hasattr(message, 'from_user') and message.from_user else "Channel"
     
-    # ── CUSTOM CAPTION LOGIC ──
     custom_caption = await get_chat_setting(chat_id, "custom_caption")
     if custom_caption:
-        caption = custom_caption.replace("{title}", title_short).replace("{user}", requester) + f"\n\n<code>00:00</code> {generate_bar(0, song['duration'])} <code>{dur_str}</code>"
+        caption = custom_caption.replace("{title}", title_short).replace("{user}", requester) + f"\n\n<code>00:00</code> {generate_bar(0, song.get('duration', 0))} <code>{dur_str}</code>"
     else:
         caption = (
             f"<blockquote>🎧 <b>𝐒𝐓𝐑𝐄𝐀𝐌𝐈𝐍𝐆 {'𝐕𝐈𝐃𝐄𝐎' if is_video else '𝐍𝐎𝐖'}</b>\n\n"
             f"🎵 <b>{title_short}</b>\n⏳ <b>𝐃𝐮𝐫𝐚𝐭𝐢𝐨𝐧 :</b> {dur_str}\n"
             f"👤 <b>𝐑𝐞𝐪𝐮𝐞𝐬𝐭 :</b> {requester}</blockquote>\n"
-            f"<code>00:00</code> {generate_bar(0, song['duration'])} <code>{dur_str}</code>"
+            f"<code>00:00</code> {generate_bar(0, song.get('duration', 0))} <code>{dur_str}</code>"
         )
 
     if chat_id in active_calls:
@@ -127,12 +126,12 @@ async def play_song_by_id(client, message, m, video_id, is_video=False):
     else:
         await m.edit_text("▸ <b>𝐂𝐨𝐧𝐧𝐞𝐜𝐭𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
         try:
-            await calls_module.calls.play(chat_id, MediaStream(song['stream_url'], video=is_video))
+            # PyTgCalls play
+            await calls_module.calls.play(chat_id, MediaStream(stream_url, video=is_video))
             current_songs[chat_id] = song
             playback_start_times[chat_id] = time.time()
             btns = get_player_buttons(chat_id)
             
-            # ── CUSTOM THUMBNAIL LOGIC ──
             custom_thumb = await get_chat_setting(chat_id, "custom_thumb")
             thumb = custom_thumb if custom_thumb else song.get('thumbnail')
 
@@ -143,18 +142,7 @@ async def play_song_by_id(client, message, m, video_id, is_video=False):
                     sent_msg = await client.send_photo(chat_id, photo=thumb, caption=caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
                 except: pass
             if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
-            live_timer_tasks[chat_id] = asyncio.create_task(update_live_timer(chat_id, sent_msg, song['duration']))
+            live_timer_tasks[chat_id] = asyncio.create_task(update_live_timer(chat_id, sent_msg, song.get('duration', 0)))
         except Exception as e:
             logger.error(f"Play error: {e}")
-            await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴠᴄ.</b>")
-
-@app.on_callback_query(filters.regex(r"^play_res_"))
-async def play_result_callback(client, query):
-    data = query.data.split("_")
-    index, user_id, mode = int(data[2]), int(data[3]), data[4]
-    if query.from_user.id != user_id: return await query.answer("❌ Yeh aapke liye nahi hain!", show_alert=True)
-    await query.message.delete()
-    results = search_cache.get(user_id, [])
-    if not results or index >= len(results): return
-    m = await client.send_message(query.message.chat.id, "⏳ <b>𝐋𝐨𝐚𝐝𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
-    await play_song_by_id(client, query.message, m, results[index]['id'], is_video=(mode == 'v'))
+            await m.edit_text(f"❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n<code>{e}</code>", parse_mode=enums.ParseMode.HTML)
