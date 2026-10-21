@@ -11,7 +11,7 @@ logger = get_logger("Downloader")
 
 # 🚨 YAHAN APNI API KEY DAALO (Quotes ke andar)
 MY_API_URL = "https://api.shrutibots.in"
-MY_API_KEY = "YAHAN_APNI_API_KEY_DALO" # Example: "Shruti_123456"
+MY_API_KEY = "ShrutiBotssHefroN4fzVuv0DNiUJD" 
 
 class Downloader:
     async def search_and_extract(self, query: str, platform="yt"):
