@@ -10,7 +10,6 @@ from utils.ratelimiter import is_rate_limited
 from plugins.queue import add_to_queue, current_songs, get_player_state
 from database.stats import increment_play_count
 from database.users import increment_user_plays
-from database.chats import get_chat_setting
 from utils.logger import get_logger
 
 logger = get_logger("PlayPlugin")
