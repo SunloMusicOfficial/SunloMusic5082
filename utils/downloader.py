@@ -9,19 +9,20 @@ from database.cookies import get_active_cookies, mark_cookie_dead, mark_cookie_s
 
 logger = get_logger("Downloader")
 
+# 🚨 BHAI, YAHAN APNI API KI DETAILS DAALO (Quotes ke andar)
+MY_API_URL = "https://api.shrutibots.in" # Example: https://api.shrutibots.in
+MY_API_KEY = "ShrutiBotssHefroN4fzVuv0DNiUJD" # Example: Shruti_123456
+
 class Downloader:
     async def search_and_extract(self, query: str, platform="yt"):
         # ── STEP 1: API Call ──
-        api_url = settings.SUNLO_DOWNLOAD_API_URL
-        api_key = settings.SUNLO_DOWNLOAD_API_KEY
-
-        if api_url and api_key:
-            logger.info(f"🚀 Calling API: {api_url} with query: {query}")
+        if MY_API_URL and MY_API_KEY and "YAHAN" not in MY_API_URL:
+            logger.info(f"🚀 Calling Custom API: {MY_API_URL} for: {query}")
             try:
                 async with aiohttp.ClientSession() as session:
-                    payload = {"url": query, "q": query, "api_key": api_key}
+                    payload = {"url": query, "q": query, "api_key": MY_API_KEY}
                     
-                    async with session.post(f"{api_url}/download", json=payload, timeout=20) as resp:
+                    async with session.post(f"{MY_API_URL.rstrip('/')}/download", json=payload, timeout=20) as resp:
                         response_text = await resp.text()
                         logger.info(f"📥 API Status: {resp.status} | Response: {response_text[:300]}")
                         
@@ -36,7 +37,7 @@ class Downloader:
                                 )
                                 
                                 if stream_url:
-                                    logger.info(f"✅ Found Stream URL from API")
+                                    logger.info(f"✅ Found Stream URL from Custom API")
                                     return {
                                         "id": data.get("id", query),
                                         "title": data.get("title", "Unknown"),
@@ -52,7 +53,7 @@ class Downloader:
             except Exception as e:
                 logger.error(f"❌ API Connection failed: {e}")
         else:
-            logger.warning("⚠️ API URL or Key is missing in Environment Variables.")
+            logger.warning("⚠️ API URL ya Key code mein nahi daali gayi hai.")
 
         # ── STEP 2: yt-dlp Fallback ──
         logger.info("🔄 Falling back to yt-dlp...")
