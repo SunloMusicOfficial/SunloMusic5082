@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, render_template_string
-import psutil, time
+import psutil, time, asyncio
 from database.users import get_total_users
 import core.calls as calls_module
 
@@ -65,10 +65,10 @@ HTML_TEMPLATE = """
 """
 
 @app.route('/')
-async def home():
+def home():
     try:
-        users = await get_total_users()
-        active_vcs = len(await calls_module.calls.calls) if calls_module.calls else 0
+        users = asyncio.run(get_total_users())
+        active_vcs = len(asyncio.run(calls_module.calls.calls)) if calls_module.calls else 0
     except:
         users, active_vcs = 0, 0
         
@@ -80,8 +80,11 @@ async def home():
     return render_template_string(HTML_TEMPLATE, users=users, vcs=active_vcs, cpu=cpu, ram=ram, uptime=uptime_str)
 
 @app.route('/api/stats')
-async def api_stats():
-    users = await get_total_users()
+def api_stats():
+    try:
+        users = asyncio.run(get_total_users())
+    except:
+        users = 0
     return jsonify({"status": "online", "total_users": users})
 
 if __name__ == "__main__":
