@@ -23,3 +23,4 @@ SpeechRecognition
 audd
 flask
 gunicorn
+yukiapi
