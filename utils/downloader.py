@@ -9,7 +9,7 @@ from database.cookies import get_active_cookies, mark_cookie_dead, mark_cookie_s
 
 logger = get_logger("Downloader")
 
-# Fallen API Endpoint
+# 🔥 Fallen API Endpoint
 SUNLO_API_URL = "https://tgmusic.fallenapi.fun"
 
 class Downloader:
@@ -19,53 +19,37 @@ class Downloader:
         # ── ENGINE 1: Sunlo Music API (FallenApi) ──
         if api_key:
             try:
-                logger.info(f"🔍 Calling Sunlo API for: {query}")
+                logger.info(f"🔍 Calling Fallen API for: {query}")
                 async with aiohttp.ClientSession() as session:
-                    # API ko GET aur POST dono tarike se try karte hain (robustness ke liye)
+                    # Fallen API usually uses /download endpoint
                     payload = {"url": query, "api_key": api_key}
                     
-                    # 1. Try POST
                     async with session.post(f"{SUNLO_API_URL}/download", json=payload, timeout=15) as resp:
                         if resp.status == 200:
                             data = await resp.json()
-                            stream_url = data.get("url") or data.get("link") or data.get("result", {}).get("url")
+                            
+                            # 🔥 YAHAN FIX HAI: Fallen API 'cdnurl' return karta hai
+                            stream_url = data.get("cdnurl") or data.get("url")
+                            
                             if stream_url:
-                                return self._format_api_response(data, query, stream_url)
-                    
-                    # 2. Try GET (Agar POST fail ho)
-                    async with session.get(f"{SUNLO_API_URL}/download?url={query}&api_key={api_key}", timeout=15) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            stream_url = data.get("url") or data.get("link") or data.get("result", {}).get("url")
-                            if stream_url:
-                                return self._format_api_response(data, query, stream_url)
-                                
+                                logger.info(f"✅ Fallen API Success: {data.get('title', query)}")
+                                return {
+                                    "id": data.get("id", query),
+                                    "title": data.get("title", "Unknown"),
+                                    "duration": data.get("duration", 0),
+                                    "stream_url": stream_url,
+                                    "thumbnail": data.get("thumbnail"),
+                                    "uploader": "Fallen API"
+                                }
+                            else:
+                                logger.warning(f"⚠️ Fallen API Response did not contain 'cdnurl': {data}")
+                        else:
+                            logger.warning(f"⚠️ Fallen API returned status {resp.status}")
             except Exception as e:
-                logger.warning(f"⚠️ Sunlo API failed: {e}. Falling back to yt-dlp...")
+                logger.warning(f"⚠️ Fallen API failed: {e}. Falling back to yt-dlp...")
 
         # ── ENGINE 2: yt-dlp Fallback (With Cookies) ──
         return await self._ytdlp_fallback(query)
-
-    def _format_api_response(self, data, query, stream_url):
-        result = data.get("result", data)
-        logger.info(f"✅ Sunlo API Success: {result.get('title', query)}")
-        
-        # Duration parsing
-        dur = result.get("duration", 0)
-        if isinstance(dur, str) and ":" in dur:
-            try:
-                parts = list(map(int, dur.split(':')))
-                dur = parts[0]*60 + parts[1] if len(parts) == 2 else parts[0]*3600 + parts[1]*60 + parts[2]
-            except: dur = 0
-            
-        return {
-            "id": result.get("id", query),
-            "title": result.get("title", "Unknown"),
-            "duration": dur,
-            "stream_url": stream_url,
-            "thumbnail": result.get("thumbnail"),
-            "uploader": "Sunlo API"
-        }
 
     async def _ytdlp_fallback(self, query):
         cookies = await get_active_cookies()
@@ -87,6 +71,10 @@ class Downloader:
                     "noplaylist": True,
                     "default_search": "ytsearch1",
                     "extractor_args": {"youtube": {"player_client": ["mweb", "web"]}},
+                    "socket_timeout": 15,
+                    # 🔥 429 error se bachne ke liye sleep add kiya
+                    "sleep_interval": 2, 
+                    "max_sleep_interval": 5,
                 }
                 if cookie_path:
                     ydl_opts["cookiefile"] = cookie_path
