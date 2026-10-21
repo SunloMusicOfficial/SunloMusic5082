@@ -1,13 +1,13 @@
 import asyncio
 import aiohttp
 import time
+from ftmgram import enums
 from utils.logger import get_logger
 from config.settings import settings
 
 logger = get_logger("KeepAlive")
 
 async def self_ping(app):
-    """Render ko sleep hone se rokne ke liye self-ping."""
     url = settings.RENDER_EXTERNAL_URL
     
     if not url:
@@ -16,7 +16,6 @@ async def self_ping(app):
 
     logger.info(f"💓 Keep-Alive active. Target: {url}")
     
-    # Startup Message
     if settings.LOG_GROUP_ID != 0:
         try:
             await app.send_message(settings.LOG_GROUP_ID, 
@@ -24,8 +23,9 @@ async def self_ping(app):
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"🌐 <b>Target:</b> <code>{url}</code>\n"
                 f"⏱ <b>Interval:</b> <code>Every 10 Minutes</code>\n"
-                f"━━━━━━━━━━━━━━━━━━━━", parse_mode="html")
-        except: pass
+                f"━━━━━━━━━━━━━━━━━━━━", parse_mode=enums.ParseMode.HTML)
+        except Exception as e:
+            logger.error(f"Failed to send startup ping log: {e}")
 
     async with aiohttp.ClientSession() as session:
         while True:
@@ -38,17 +38,21 @@ async def self_ping(app):
                     logger.info(f"Self-ping: {resp.status} ({latency}ms)")
                     
                     if settings.LOG_GROUP_ID != 0:
-                        await app.send_message(settings.LOG_GROUP_ID,
-                            f"{status_text}\n"
-                            f"📡 <b>Response:</b> <code>{resp.status}</code>\n"
-                            f"⚡ <b>Latency:</b> <code>{latency} ms</code>\n"
-                            f"🟢 <b>Status:</b> <code>Bot is Awake</code>", parse_mode="html")
+                        try:
+                            await app.send_message(settings.LOG_GROUP_ID,
+                                f"{status_text}\n"
+                                f"📡 <b>Response:</b> <code>{resp.status}</code>\n"
+                                f"⚡ <b>Latency:</b> <code>{latency} ms</code>\n"
+                                f"🟢 <b>Status:</b> <code>Bot is Awake</code>", parse_mode=enums.ParseMode.HTML)
+                        except: pass
             except Exception as e:
                 logger.error(f"Self-ping failed: {e}")
                 if settings.LOG_GROUP_ID != 0:
-                    await app.send_message(settings.LOG_GROUP_ID,
-                        f"🚨 <b>𝐏𝐈𝐍𝐆 𝐅𝐀𝐈𝐋𝐄𝐃</b> 🚨\n"
-                        f"❌ <b>Error:</b> <code>{str(e)[:50]}</code>\n"
-                        f"🔴 <b>Action:</b> <i>Render might be down!</i>", parse_mode="html")
+                    try:
+                        await app.send_message(settings.LOG_GROUP_ID,
+                            f"🚨 <b>𝐏𝐈𝐍𝐆 𝐅𝐀𝐈𝐋𝐄𝐃</b> 🚨\n"
+                            f"❌ <b>Error:</b> <code>{str(e)[:50]}</code>\n"
+                            f"🔴 <b>Action:</b> <i>Render might be down!</i>", parse_mode=enums.ParseMode.HTML)
+                    except: pass
             
             await asyncio.sleep(600) # 10 Minutes
