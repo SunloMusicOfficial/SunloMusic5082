@@ -16,6 +16,13 @@ async def is_gbanned(user_id: int):
     user = await db.db.users.find_one({"user_id": user_id})
     return user.get("is_gbanned", False) if user else False
 
+async def increment_user_plays(user_id: int):
+    await db.db.users.update_one({"user_id": user_id}, {"$inc": {"plays": 1}}, upsert=True)
+
+async def get_user_plays(user_id: int):
+    user = await db.db.users.find_one({"user_id": user_id})
+    return user.get("plays", 0) if user else 0
+
 async def set_afk(user_id: int, reason: str):
     await db.db.users.update_one({"user_id": user_id}, {"$set": {"afk_reason": reason}}, upsert=True)
 
