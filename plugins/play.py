@@ -34,7 +34,7 @@ async def play_handler(client, message):
     
     song = await downloader.search_and_extract(query)
     if not song:
-        try: await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ.</b>", parse_mode=enums.ParseMode.HTML)
+        try: await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n<i>Could not extract stream URL.</i>", parse_mode=enums.ParseMode.HTML)
         except: pass
         return
 
@@ -58,7 +58,6 @@ async def play_song_by_id(client, message, m, song, is_video=False):
     if chat_id in active_calls and chat_id in current_songs:
         await add_to_queue(chat_id, song)
         
-        # 🔥 PREMIUM QUEUE UI
         queue_caption = (
             f"📥 <b>𝐀𝐝𝐝𝐞𝐝 𝐭𝐨 𝐐𝐮𝐞𝐮𝐞</b> 📥\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -82,23 +81,36 @@ async def play_song_by_id(client, message, m, song, is_video=False):
     except: pass
     
     try:
+        # 🔥 Force clear state
         try:
-            await calls_module.calls.leave_call(chat_id)
-            await asyncio.sleep(1)
+            await asyncio.wait_for(calls_module.calls.leave_call(chat_id), timeout=5)
         except: pass
+        await asyncio.sleep(1)
 
         stream_url = song['stream_url']
         if not stream_url.startswith("http"):
             stream_url = os.path.abspath(stream_url)
 
-        await calls_module.calls.play(chat_id, MediaStream(stream_url))
-        current_songs[chat_id] = song
+        # 🔥 TIMEOUT FIX: Agar 15 second mein play nahi hua, toh cancel karo
+        await asyncio.wait_for(
+            calls_module.calls.play(chat_id, MediaStream(stream_url)), 
+            timeout=15
+        )
         
-        # 🔥 SEND UI CARD
+        current_songs[chat_id] = song
         await send_now_playing_card(client, chat_id, song, is_video, m)
+        
+    except asyncio.TimeoutError:
+        logger.error(f"❌ PyTgCalls Play Timeout for {chat_id}")
+        current_songs.pop(chat_id, None)
+        try: 
+            await calls_module.calls.leave_call(chat_id)
+        except: pass
+        try: await m.edit_text("❌ **Failed to play!** Voice Engine timed out. Please try another song.", parse_mode=enums.ParseMode.HTML)
+        except: pass
         
     except Exception as e:
         logger.error(f"Play error: {e}")
         current_songs.pop(chat_id, None)
-        try: await m.edit_text(f"❌ <b>ꜰᴀɪʟᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴠᴄ.</b>", parse_mode=enums.ParseMode.HTML)
+        try: await m.edit_text(f"❌ <b>ꜰᴀɪʟᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴠᴄ.</b>\n<code>{e}</code>", parse_mode=enums.ParseMode.HTML)
         except: pass

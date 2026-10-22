@@ -1,4 +1,5 @@
 import random
+import asyncio
 from pytgcalls.types import MediaStream
 import core.calls as calls_module
 from utils.player_state import get_player_state
@@ -44,9 +45,20 @@ async def play_next_in_queue(chat_id: int):
         elif effect == "vaporwave": ffmpeg_args = "-af atempo=0.8,asetrate=44100*0.8"
         elif effect == "karaoke": ffmpeg_args = "-af pan=stereo|c0=c0|c1=-1*c1"
 
-        await calls_module.calls.play(chat_id, MediaStream(stream_url, ffmpeg_parameters=ffmpeg_args))
+        # 🔥 TIMEOUT FIX
+        await asyncio.wait_for(
+            calls_module.calls.play(chat_id, MediaStream(stream_url, ffmpeg_parameters=ffmpeg_args)),
+            timeout=15
+        )
+        
         logger.info(f"🎵 Playing next: {next_song['title']} in {chat_id}")
-        return next_song # 🔥 Return song data for UI
+        return next_song
+    except asyncio.TimeoutError:
+        logger.error(f"❌ Queue Play Timeout in {chat_id}")
+        current_songs.pop(chat_id, None)
+        try: await calls_module.calls.leave_call(chat_id)
+        except: pass
+        return None
     except Exception as e:
         logger.error(f"Queue play error: {e}")
         return None
