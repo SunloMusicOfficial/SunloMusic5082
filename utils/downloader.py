@@ -1,9 +1,11 @@
+
 import asyncio
 import aiohttp
 import yt_dlp
 import os
 import time
 import re
+import json
 import tempfile
 from utils.logger import get_logger
 from config.settings import settings
@@ -18,58 +20,68 @@ class Downloader:
         duration = 0
         thumbnail = None
 
-        # 1. YouTube URL nikaalo (Bina yt-dlp ke, taaki block na ho)
+        # 1. YouTube Search via ytInitialData (Accurate & No yt-dlp block)
         if not query.startswith("http"):
             logger.info(f"🔍 Scraping YouTube for: {query}")
-            
-            # Try 1: Direct Web Scraper (Sabse Fast & Block-Free)
             try:
                 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
                 search_url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}"
+                
                 async with aiohttp.ClientSession() as session:
                     async with session.get(search_url, headers=headers, timeout=10) as resp:
                         html = await resp.text()
-                        match = re.search(r'watch\?v=([a-zA-Z0-9_-]{11})', html)
+                        
+                        # Extract ytInitialData JSON
+                        match = re.search(r'var ytInitialData = ({.*?});</script>', html, re.DOTALL)
                         if match:
-                            video_id = match.group(1)
-                            video_url = f"https://www.youtube.com/watch?v={video_id}"
-                            logger.info(f"✅ Found URL via Web Scraper: {video_url}")
+                            data = json.loads(match.group(1))
+                            
+                            # Function to find the first videoRenderer object
+                            def find_video(obj):
+                                if isinstance(obj, dict):
+                                    if "videoRenderer" in obj:
+                                        return obj["videoRenderer"]
+                                    for k, v in obj.items():
+                                        res = find_video(v)
+                                        if res: return res
+                                elif isinstance(obj, list):
+                                    for item in obj:
+                                        res = find_video(item)
+                                        if res: return res
+                                return None
+                            
+                            renderer = find_video(data)
+                            if renderer:
+                                video_id = renderer["videoId"]
+                                video_url = f"https://www.youtube.com/watch?v={video_id}"
+                                title = renderer["title"]["runs"][0]["text"]
+                                
+                                # Extract Duration
+                                if "lengthText" in renderer:
+                                    dur_str = renderer["lengthText"]["simpleText"]
+                                    parts = list(map(int, dur_str.split(":")))
+                                    if len(parts) == 2: duration = parts[0]*60 + parts[1]
+                                    elif len(parts) == 3: duration = parts[0]*3600 + parts[1]*60 + parts[2]
+                                
+                                # Extract Thumbnail
+                                thumbnails = renderer.get("thumbnail", {}).get("thumbnails", [])
+                                if thumbnails:
+                                    thumbnail = thumbnails[-1]["url"]
+                                
+                                logger.info(f"✅ Found URL: {video_url} | Title: {title} | Dur: {duration}s")
+                        else:
+                            logger.warning("⚠️ Could not parse ytInitialData, fallback to simple regex.")
+                            fallback = re.search(r'watch\?v=([a-zA-Z0-9_-]{11})', html)
+                            if fallback:
+                                video_url = f"https://www.youtube.com/watch?v={fallback.group(1)}"
             except Exception as e:
                 logger.warning(f"⚠️ Web Scraper failed: {e}")
 
-            # Try 2: yt-dlp search (Agar scraper fail ho jaye)
-            if video_url == query:
-                cookies = await get_active_cookies()
-                cookie_path = None
-                if cookies:
-                    temp_fd, cookie_path = tempfile.mkstemp(suffix=".txt")
-                    with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
-                        f.write(cookies[0]["data"])
+        if "None" in video_url or video_url == query:
+            logger.error("❌ Could not find proper video URL.")
+            return None
 
-                try:
-                    ydl_opts = {"quiet": True, "extract_flat": True, "default_search": "ytsearch1"}
-                    if cookie_path:
-                        ydl_opts["cookiefile"] = cookie_path
-
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info = ydl.extract_info(f"ytsearch1:{query}", download=False)
-                        if "entries" in info and info["entries"]:
-                            entry = info["entries"][0]
-                            if entry.get("id"):
-                                video_url = f"https://www.youtube.com/watch?v={entry['id']}"
-                                logger.info(f"✅ Found URL via yt-dlp: {video_url}")
-                except Exception as e:
-                    logger.warning(f"⚠️ yt-dlp search failed: {e}")
-                finally:
-                    if cookie_path and os.path.exists(cookie_path):
-                        os.remove(cookie_path)
-
-            # Agar dono fail ho gaye
-            if video_url == query:
-                logger.error("❌ Could not find video URL.")
-                return None
-
-        # 2. API ko Sahi URL bhejo
+        # 2. API Call
         api_url = getattr(settings, "SUNLO_DOWNLOAD_API_URL", "")
         api_key = getattr(settings, "SUNLO_DOWNLOAD_API_KEY", "")
 
@@ -86,22 +98,18 @@ class Downloader:
                         if resp.status == 200:
                             content_type = resp.headers.get("Content-Type", "")
                             
-                            # Agar API JSON return kare
                             if "application/json" in content_type:
                                 data = await resp.json()
                                 stream_url = data.get("url") or data.get("link") or data.get("download_url")
                                 if stream_url:
-                                    logger.info("✅ Found Stream URL from JSON API")
                                     return {
-                                        "id": video_url.split("v=")[-1], 
+                                        "id": video_id, 
                                         "title": data.get("title", title), 
                                         "duration": data.get("duration", duration), 
                                         "stream_url": stream_url, 
                                         "thumbnail": data.get("thumbnail", thumbnail), 
                                         "uploader": "API"
                                     }
-                            
-                            # Agar API direct file return kare
                             else:
                                 ext = ".m4a" if "mp4" in content_type else ".mp3"
                                 file_path = f"cache/api_{timestamp}{ext}"
@@ -113,21 +121,17 @@ class Downloader:
                                 
                                 logger.info(f"✅ Saved: {file_path}")
                                 return {
-                                    "id": video_url.split("v=")[-1], 
-                                    "title": title, 
-                                    "duration": duration, 
+                                    "id": video_id, 
+                                    "title": title, # Ab sahi title aayega
+                                    "duration": duration, # Ab sahi timer chalega
                                     "stream_url": file_path,
-                                    "thumbnail": thumbnail, 
+                                    "thumbnail": thumbnail, # Ab thumbnail aayega
                                     "uploader": "API File"
                                 }
                         else:
-                            error_text = await resp.text()
-                            logger.error(f"❌ API error {resp.status}: {error_text[:100]}")
-                            
-            except asyncio.TimeoutError:
-                logger.error("❌ API Timeout.")
+                            logger.error(f"❌ API error {resp.status}: {await resp.text()}")
             except Exception as e:
-                logger.error(f"❌ API failed: {e}")
+                logger.error(f"❌ API Request failed: {e}")
 
         return None
 
