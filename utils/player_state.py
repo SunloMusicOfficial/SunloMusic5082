@@ -20,33 +20,45 @@ def get_time_str(sec):
     m, s = divmod(int(sec), 60)
     return f"{m:02d}:{s:02d}"
 
-# 🔥 TIMER 10 (MODIFIED - MOTA LINE)
-def generate_bar(current, total, length=10):
-    if total == 0: return "─" * length
+# 🔥 TIMER 10 (MOTA LINE - "♪" + "🎵" + "━")
+def generate_bar(current, total, length=8):
+    if total == 0: return "━" * length
     played = int((current / total) * length)
     if played >= length: played = length - 1
     rem = length - played - 1
     return "♪" * played + "🎵" + "━" * rem
 
+# 🔥 LAYOUT SELECTOR (Yahan 14 ya 19 daalo)
+LAYOUT_CHOICE = 14 
+
 def get_player_buttons(chat_id, video_id, current=0, total=0):
     state = get_player_state(chat_id)
     play_text = "▶️ ʀᴇꜱᴜᴍᴇ" if state.get("is_paused", False) else "⏸ ᴘᴀᴜꜱᴇ"
-    auto_btn = "✅ ᴀᴜᴛᴏᴘʟᴀʏ ᴏɴ" if state.get("autoplay", False) else "🔄 ᴀᴜᴛᴏᴘʟᴀʏ ᴏꜰꜰ"
     
     time_btn_text = f"{get_time_str(current)} {generate_bar(current, total)} {get_time_str(total)}"
 
+    if LAYOUT_CHOICE == 14:
+        # LAYOUT 14 (Music Note - Small Bold)
+        auto_btn = "✅ ᴀᴜᴛᴏ ᴏɴ" if state.get("autoplay", False) else "🎵 ᴀᴜᴛᴏ ᴏꜰꜰ"
+        stop_btn = "🔇 ꜱᴛᴏᴘ"
+        more_btn = "🎶 ᴍᴏʀᴇ"
+    else:
+        # LAYOUT 19 (Love/Romantic - Small Bold)
+        auto_btn = "✅ ᴀᴜᴛᴏ ᴏɴ" if state.get("autoplay", False) else "💖 ᴀᴜᴛᴏ ᴏꜰꜰ"
+        stop_btn = "💔 ꜱᴛᴏᴘ"
+        more_btn = "💌 ᴍᴏʀᴇ"
+
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(time_btn_text, callback_data="ignore")], # Timer
+        [InlineKeyboardButton(time_btn_text, callback_data="ignore")],
         [
-            InlineKeyboardButton(play_text, callback_data="pause_resume"), # Pause | Skip
+            InlineKeyboardButton(play_text, callback_data="pause_resume"),
             InlineKeyboardButton("⏭ ꜱᴋɪᴘ", callback_data="skip")
         ],
         [
-            InlineKeyboardButton(auto_btn, callback_data="autoplay") # Autoplay
+            InlineKeyboardButton(auto_btn, callback_data="autoplay"),
+            InlineKeyboardButton(stop_btn, callback_data="stop")
         ],
-        [
-            InlineKeyboardButton("✨ ᴍᴏʀᴇ ᴄᴏɴᴛʀᴏʟꜱ", callback_data="more_controls") # More Controls
-        ]
+        [InlineKeyboardButton(more_btn, callback_data="more_controls")]
     ])
 
 def get_expanded_buttons(chat_id, current=0, total=0):
@@ -55,9 +67,8 @@ def get_expanded_buttons(chat_id, current=0, total=0):
     shuffle_btn = "🔀 ꜱʜᴜꜰꜰʟᴇ ᴏɴ" if state.get("shuffle", False) else "🔀 ꜱʜᴜꜰꜰʟᴇ ᴏꜰꜰ"
 
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⏪ -10ꜱ", callback_data="seek_m10"), InlineKeyboardButton("⏩ +10ꜱ", callback_data="seek_p10")],
         [InlineKeyboardButton(shuffle_btn, callback_data="shuffle"), InlineKeyboardButton(loop_btn, callback_data="loop")],
-        [InlineKeyboardButton("⏹ ꜱᴛᴏᴘ ꜱᴛʀᴇᴀᴍ", callback_data="stop")],
+        [InlineKeyboardButton("⏪ -10ꜱ", callback_data="seek_m10"), InlineKeyboardButton("+10ꜱ ⏩", callback_data="seek_p10")],
         [InlineKeyboardButton("🔙 ʙᴀᴄᴋ", callback_data="back_to_main")]
     ])
 
@@ -96,44 +107,13 @@ async def send_now_playing_card(client, chat_id, song, is_video=False, m=None):
     bot_username = settings.BOT_USERNAME.replace('@', '')
     title_link = f'<a href="https://t.me/{bot_username}?start=song_{video_id}">{title_short}</a>'
     
-    # 🔥 AAPKE CHUNE HUE 4 STYLES
-    CAPTION_STYLE = 8 # <--- YAHAN NUMBER CHANGE KARO: 8, 10, 15, ya 16
-    
-    if CAPTION_STYLE == 8:
-        # Style 8: The Emoji Heavy
-        caption = (
-            f"🎧🎶 <b>Music Time</b> 🎶🎧\n\n"
-            f"🎵 {title_link}\n"
-            f"⏳ Length: {dur_str}\n"
-            f"🙋‍♂️ Request: {requester}"
-        )
-    elif CAPTION_STYLE == 10:
-        # Style 10: The Love / Romantic
-        caption = (
-            f"💖 <b>Playing with Love</b> 💖\n\n"
-            f"🎵 {title_link}\n"
-            f"⏳ {dur_str}\n"
-            f"💌 Dedicated to: {requester}"
-        )
-    elif CAPTION_STYLE == 15:
-        # Style 15: The Subtle Dark
-        caption = (
-            f"🖤 <b>Playing</b>\n\n"
-            f"🎶 {title_link}\n"
-            f"🕒 {dur_str}\n"
-            f"👤 {requester}"
-        )
-    elif CAPTION_STYLE == 16:
-        # Style 16: The "Sunlo" Branded
-        caption = (
-            f"☀️ <b>Sunlo Music</b>\n\n"
-            f"🎵 {title_link}\n"
-            f"⏳ {dur_str}\n"
-            f"🎙 {requester}"
-        )
-    else:
-        # Fallback
-        caption = f"🎧 <b>Now Playing</b>\n\n▶️ {title_link}\n⏳ {dur_str}\n👤 {requester}"
+    # 🔥 CAPTION STYLE 8 (Jo aapne pehle pasand kiya tha)
+    caption = (
+        f"🎧🎶 <b>Music Time</b> 🎶🎧\n\n"
+        f"🎵 {title_link}\n"
+        f"⏳ Length: {dur_str}\n"
+        f"🙋‍♂️ Request: {requester}"
+    )
 
     playback_start_times[chat_id] = time.time()
     btns = get_player_buttons(chat_id, video_id, 0, song.get('duration', 0))
