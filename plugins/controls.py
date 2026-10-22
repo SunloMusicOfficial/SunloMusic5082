@@ -140,13 +140,17 @@ async def controls_callback(client, query: CallbackQuery):
             seek_sec = -10 if data == "seek_m10" else 10
             new_time = max(0, current_time + seek_sec)
             
-            # 🔥 FIX: PyTgCalls v3 seek method
-            await calls_module.calls.seek(chat_id, new_time)
-            
-            playback_start_times[chat_id] = time.time() - new_time
-            await query.answer(f"⏩ Seeked to {new_time}s")
-            song = current_songs.get(chat_id, {})
-            await query.message.edit_reply_markup(reply_markup=get_expanded_buttons(chat_id, new_time, song.get('duration', 0)))
+            # 🔥 FIX: PyTgCalls v3 Seek Method
+            try:
+                # Naya tarika seek karne ka
+                await calls_module.calls.seek_stream(chat_id, new_time)
+                playback_start_times[chat_id] = time.time() - new_time
+                await query.answer(f"⏩ Seeked to {new_time}s")
+                song = current_songs.get(chat_id, {})
+                await query.message.edit_reply_markup(reply_markup=get_expanded_buttons(chat_id, new_time, song.get('duration', 0)))
+            except Exception as seek_err:
+                logger.error(f"Seek error: {seek_err}")
+                await query.answer("❌ Seeking not supported by engine.", show_alert=True)
             
     except Exception as e:
         logger.error(f"Callback error: {e}")
