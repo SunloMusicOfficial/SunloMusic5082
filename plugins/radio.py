@@ -3,8 +3,7 @@ from core.bot import app
 from utils.decorators import register_user
 import core.calls as calls_module
 from pytgcalls.types import MediaStream
-from plugins.play import get_player_buttons
-import time
+from utils.player_state import get_player_buttons
 
 RADIO_STATIONS = {
     "lofi": "https://stream.zeno.fm/0r0xa792kwzuv",
@@ -29,7 +28,6 @@ async def radio_handler(client, message):
     
     try:
         await calls_module.calls.play(chat_id, MediaStream(url))
-        
         caption = (
             f"<blockquote>📻 <b>𝐋𝐈𝐕𝐄 𝐑𝐀𝐃𝐈𝐎</b>\n\n"
             f"🎙 <b>Station:</b> {station.upper()}\n"

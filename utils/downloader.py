@@ -8,7 +8,6 @@ import json
 import tempfile
 from utils.logger import get_logger
 from config.settings import settings
-from database.cookies import get_active_cookies
 
 logger = get_logger("Downloader")
 
@@ -17,7 +16,6 @@ class Downloader:
         video_url = query
         title = query
         duration = 0
-        thumbnail = None
         video_id = None
 
         if not query.startswith("http"):
@@ -29,7 +27,6 @@ class Downloader:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(search_url, headers=headers, timeout=10) as resp:
                         html = await resp.text()
-                        
                         match = re.search(r'var ytInitialData = ({.*?});</script>', html, re.DOTALL)
                         if match:
                             data = json.loads(match.group(1))
@@ -47,7 +44,6 @@ class Downloader:
                             
                             renderers = find_videos(data, [])
                             best_renderer = None
-                            
                             for r in renderers:
                                 if "lengthText" in r:
                                     dur_str = r["lengthText"]["simpleText"]
@@ -56,7 +52,7 @@ class Downloader:
                                     if len(parts) == 2: dur = parts[0]*60 + parts[1]
                                     elif len(parts) == 3: dur = parts[0]*3600 + parts[1]*60 + parts[2]
                                     
-                                    if 60 < dur < 900: # 1 min to 15 mins
+                                    if 60 < dur < 900:
                                         best_renderer = r
                                         break
                             
@@ -67,16 +63,11 @@ class Downloader:
                                 video_id = best_renderer["videoId"]
                                 video_url = f"https://www.youtube.com/watch?v={video_id}"
                                 title = best_renderer["title"]["runs"][0]["text"]
-                                
                                 if "lengthText" in best_renderer:
                                     dur_str = best_renderer["lengthText"]["simpleText"]
                                     parts = list(map(int, dur_str.split(":")))
                                     if len(parts) == 2: duration = parts[0]*60 + parts[1]
                                     elif len(parts) == 3: duration = parts[0]*3600 + parts[1]*60 + parts[2]
-                                
-                                thumbnails = best_renderer.get("thumbnail", {}).get("thumbnails", [])
-                                if thumbnails:
-                                    thumbnail = thumbnails[-1]["url"]
             except Exception as e:
                 logger.warning(f"⚠️ Web Scraper failed: {e}")
 
@@ -86,9 +77,8 @@ class Downloader:
         if not video_id:
             return None
 
-        # 🔥 FIX: Agar thumbnail nahi mila, toh YouTube ki default URL use karo
-        if not thumbnail:
-            thumbnail = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+        # 🔥 FORCE RELIABLE THUMBNAIL (i.ytimg.com)
+        thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
 
         api_url = getattr(settings, "SUNLO_DOWNLOAD_API_URL", "")
         api_key = getattr(settings, "SUNLO_DOWNLOAD_API_KEY", "")
@@ -110,11 +100,10 @@ class Downloader:
                                 data = await resp.json()
                                 stream_url = data.get("url") or data.get("link") or data.get("download_url")
                                 if stream_url:
-                                    return {"id": video_id, "title": data.get("title", title), "duration": data.get("duration", duration), "stream_url": stream_url, "thumbnail": data.get("thumbnail", thumbnail), "uploader": "API"}
+                                    return {"id": video_id, "title": data.get("title", title), "duration": data.get("duration", duration), "stream_url": stream_url, "thumbnail": thumbnail, "uploader": "API"}
                             else:
                                 ext = ".m4a" if "mp4" in content_type else ".mp3"
                                 file_path = f"cache/api_{timestamp}{ext}"
-                                
                                 with open(file_path, "wb") as f:
                                     async for chunk in resp.content.iter_chunked(65536):
                                         f.write(chunk)

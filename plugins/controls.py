@@ -26,6 +26,7 @@ async def skip_cmd(client, message):
     try: await m.delete()
     except: pass
     
+    # 🔥 Naya Card bhejo
     if next_song:
         await send_now_playing_card(client, chat_id, next_song)
 

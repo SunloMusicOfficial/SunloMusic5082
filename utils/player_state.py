@@ -1,4 +1,4 @@
-import asyncio, time, re, os
+import asyncio, time, re
 from ftmgram import enums
 from ftmgram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils.logger import get_logger
