@@ -75,24 +75,20 @@ async def play_handler(client, message):
     m = await client.send_message(message.chat.id, "🔍 <b>𝐒𝐞𝐚𝐫𝐜𝐡𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
     
     song = await downloader.search_and_extract(query)
-    
-    if not song or not song.get("stream_url"):
-        return await m.edit_text(
-            "❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n"
-            "Could not extract stream URL.\n\n"
-            "📋 <i>Check Render logs for exact API response.</i>", 
-            parse_mode=enums.ParseMode.HTML
-        )
+    if not song:
+        return await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n<i>Could not extract stream URL.</i>", parse_mode=enums.ParseMode.HTML)
 
     await play_song_by_id(client, message, m, song, is_video)
 
 async def play_song_by_id(client, message, m, song, is_video=False):
-    await increment_play_count(song.get('title', 'Unknown'))
-    if hasattr(message, 'from_user') and message.from_user:
-        await increment_user_plays(message.from_user.id)
-    
     chat_id = message.chat.id
     active_calls = await calls_module.calls.calls
+    
+    # 🔥 FIX: Agar bot VC me hai par gaana nahi chal raha (stuck), toh use clear karo
+    if chat_id in active_calls and chat_id not in current_songs:
+        logger.warning(f"⚠️ Clearing stuck VC state for {chat_id}")
+        active_calls.pop(chat_id, None)
+
     dur_str = get_time_str(song.get('duration', 0))
     title_short = song.get('title', 'Unknown')[:35] + "..." if len(song.get('title', 'Unknown')) > 35 else song.get('title', 'Unknown')
 
@@ -106,9 +102,11 @@ async def play_song_by_id(client, message, m, song, is_video=False):
     )
 
     if chat_id in active_calls:
+        # Queue System
         await add_to_queue(chat_id, song)
         await m.edit_text(f"📥 <b>𝐀𝐝𝐝𝐞𝐝 𝐭𝐨 𝐐𝐮𝐞𝐮𝐞 :</b>\n🎵 {title_short}", parse_mode=enums.ParseMode.HTML)
     else:
+        # Direct Play
         await m.edit_text("▸ <b>𝐂𝐨𝐧𝐧𝐞𝐜𝐭𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
         try:
             await calls_module.calls.play(chat_id, MediaStream(song['stream_url']))
@@ -116,15 +114,7 @@ async def play_song_by_id(client, message, m, song, is_video=False):
             playback_start_times[chat_id] = time.time()
             btns = get_player_buttons(chat_id)
             
-            thumb = song.get('thumbnail')
             sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
-            
-            if thumb and not is_video:
-                try:
-                    await m.delete()
-                    sent_msg = await client.send_photo(chat_id, photo=thumb, caption=caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
-                except: pass
-                
             if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
             live_timer_tasks[chat_id] = asyncio.create_task(update_live_timer(chat_id, sent_msg, song.get('duration', 0)))
         except Exception as e:
