@@ -133,12 +133,14 @@ async def controls_callback(client, query: CallbackQuery):
             await query.message.edit_reply_markup(reply_markup=get_expanded_buttons(chat_id, 0, song.get('duration', 0)))
 
         elif data in ["seek_m10", "seek_p10"]:
-            if chat_id not in playback_start_times: return await query.answer("❌ No active stream.")
+            if chat_id not in playback_start_times: 
+                return await query.answer("❌ No active stream.")
+            
             current_time = int(time.time() - playback_start_times[chat_id])
             seek_sec = -10 if data == "seek_m10" else 10
             new_time = max(0, current_time + seek_sec)
             
-            # 🔥 FIX: PyTgCalls v3 uses .seek() instead of .seek_stream()
+            # 🔥 FIX: PyTgCalls v3 seek method
             await calls_module.calls.seek(chat_id, new_time)
             
             playback_start_times[chat_id] = time.time() - new_time
@@ -148,4 +150,4 @@ async def controls_callback(client, query: CallbackQuery):
             
     except Exception as e:
         logger.error(f"Callback error: {e}")
-        await query.answer("❌ Error occurred.", show_alert=True)
+        await query.answer(f"❌ Error: {e}", show_alert=True)

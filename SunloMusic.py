@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from ftmgram import idle, enums
 from pytgcalls.types import Update, StreamEnded
+
 from config.settings import settings
 from core.bot import app
 from core.userbot import userbot
@@ -53,10 +54,10 @@ async def startup():
     @calls_module.calls.on_update()
     async def stream_handler(client, update: Update):
         try:
-            # 🔥 FIX: Properly extract chat_id from StreamEnded
             if isinstance(update, StreamEnded):
-                chat_id = update.update.chat_id  # v3 uses nested update
-                print(f"🎵 Song ended in {chat_id}.")
+                # 🔥 FIX: Direct update.chat_id
+                chat_id = update.chat_id
+                print(f"🎵 Song ended in {chat_id}. Checking queue...")
                 
                 try:
                     next_song = await asyncio.wait_for(play_next_in_queue(chat_id), timeout=15)
@@ -67,7 +68,7 @@ async def startup():
                         await delete_active_card(chat_id)
                         print(f"🚪 Auto left VC in {chat_id}")
                 except Exception as e:
-                    print(f"Queue empty or error: {e}")
+                    print(f"Queue error: {e}")
                     try: await calls_module.calls.leave_call(chat_id)
                     except: pass
                     await delete_active_card(chat_id)
