@@ -19,13 +19,13 @@ class Settings:
     LOG_CHANNEL = int(os.getenv("LOG_CHANNEL", 0))
     LOG_GROUP_ID = int(os.getenv("LOG_GROUP_ID", 0))
     
-    # 🔥 FIX: RENDER EXTERNAL URL ADDED
-    RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip()
-    
-    # 🔥 API VARIABLES
+    # 🔥 API KEYS (Render/Env variables)
     SUNLO_DOWNLOAD_API_KEY = os.getenv("SUNLO_DOWNLOAD_API_KEY", "").strip()
     SUNLO_DOWNLOAD_API_URL = os.getenv("SUNLO_DOWNLOAD_API_URL", "").strip().rstrip("/")
+    SUNLO_AI_KEY = os.getenv("SUNLO_AI_KEY", "").strip() # 🔥 NEW: AI KEY
     AUDD_API_KEY = os.getenv("AUDD_API_KEY", "").strip()
+    
+    RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").strip()
 
     CACHE_DIR = os.getenv("CACHE_DIR", "cache")
     MAX_CACHE_SIZE_MB = int(os.getenv("MAX_CACHE_SIZE_MB", 2048))

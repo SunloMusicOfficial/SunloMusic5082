@@ -1,7 +1,12 @@
+# ── MTProto Client & Engine ──
 ftmgram
 pyrofork
 py-tgcalls>=2.1.0
+
+# ── Database ──
 motor>=3.4.0
+
+# ── Core Utilities ──
 python-dotenv
 yt-dlp
 yukiapi
@@ -11,6 +16,8 @@ aiofiles
 Pillow
 pytz
 uvloop
+
+# ── Tools & Extras ──
 psutil
 wikipedia
 gtts
@@ -22,6 +29,13 @@ deep-translator
 pyshorteners
 SpeechRecognition
 audd
+
+# ── AI Engine (SunloMusicOfficialAi) ──
+google-generativeai
+
+# ── Web Dashboard ──
 flask
 gunicorn
+
+# ── Security ──
 cryptography

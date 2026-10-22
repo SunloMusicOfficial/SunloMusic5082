@@ -22,6 +22,7 @@ from utils.logger import get_logger
 from utils.log_cleaner import clear_old_logs
 from utils.keep_alive import self_ping
 from plugins.queue import current_songs
+from utils.player_state import send_now_playing_card, delete_active_card
 
 logger = get_logger("SunloMusic")
 PLUGINS_DIR = Path("plugins")
@@ -53,7 +54,7 @@ async def auto_leave_vc():
             active_calls = await calls_module.calls.calls
             for chat_id in list(active_calls.keys()):
                 if chat_id not in current_songs:
-                    await calls_module.calls.leave_call(chat_id)
+                    await asyncio.wait_for(calls_module.calls.leave_call(chat_id), timeout=10)
                     logger.info(f"🚪 Auto-Left VC in {chat_id} (Inactive)")
         except: pass
 
@@ -91,16 +92,39 @@ async def startup():
         sys.exit(1)
     
     from pytgcalls import PyTgCalls
+    from pytgcalls.types import Update, StreamEnded
     calls_module.calls = PyTgCalls(userbot)
     await calls_module.calls.start()
     
+    # 🔥 STREAM ENDED HANDLER (Auto-Play Next Song)
+    @calls_module.calls.on_update()
+    async def stream_handler(client, update: Update):
+        try:
+            if update.status == StreamEnded or update.status == "stream_ended":
+                chat_id = update.chat_id
+                logger.info(f"🎵 Song ended in {chat_id}. Checking queue...")
+                
+                from plugins.queue import play_next_in_queue
+                try:
+                    next_song = await asyncio.wait_for(play_next_in_queue(chat_id), timeout=20)
+                    if next_song:
+                        await send_now_playing_card(app, chat_id, next_song)
+                    else:
+                        await delete_active_card(chat_id)
+                except asyncio.TimeoutError:
+                    logger.error(f"❌ Queue timeout in {chat_id}")
+                    current_songs.pop(chat_id, None)
+                    await asyncio.wait_for(calls_module.calls.leave_call(chat_id), timeout=5)
+                    await delete_active_card(chat_id)
+        except Exception as e:
+            logger.error(f"Stream handler error: {e}")
+            
     logger.info("⏳ Loading Plugins...")
     plugins = load_plugins()
     
-    # Start Background Tasks
     asyncio.create_task(health_monitor(app, userbot))
     asyncio.create_task(auto_leave_vc())
-    asyncio.create_task(self_ping(app)) # 🔥 Start Self-Ping
+    asyncio.create_task(self_ping(app))
     
     await send_log(
         f"🤖 <b>𝐀𝐒𝐒𝐈𝐒𝐓𝐀𝐍𝐓 𝐔𝐒𝐄𝐑𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n"
@@ -111,9 +135,7 @@ async def startup():
     await send_log(
         f"🚀 <b>𝐒𝐔𝐍𝐋𝐎 𝐌𝐔𝐒𝐈𝐂 𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n"
         f"🤖 <b>Bot:</b> @{me.username}\n"
-        f"⚙️ <b>Plugins:</b> <code>{len(plugins)} Loaded</code>\n"
-        f"🗄 <b>Database:</b> <code>Connected</code>\n"
-        f"🎙 <b>Voice Engine:</b> <code>Active</code>"
+        f"⚙️ <b>Plugins:</b> <code>{len(plugins)} Loaded</code>"
     )
     
     logger.info("🚀 Sunlo Music is ready to rock!")
