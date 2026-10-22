@@ -2,8 +2,9 @@ from config.settings import settings
 
 class Constants:
     VERSION = "1.0.0"
-    # Image ab .env se aayegi
-    START_IMG = settings.START_IMG_URL 
+    
+    # Default image agar env mein nahi hai
+    START_IMG = settings.START_IMG_URL if settings.START_IMG_URL else "https://files.catbox.moe/sunlo_start.jpg"
     
     START_TEXT = (
         "👋 <b>Welcome to Sunlo Music!</b>\n\n"
@@ -25,7 +26,7 @@ class Constants:
         "▸ /stop - Stop and leave VC\n\n"
         "🛠 <b>Other:</b>\n"
         "▸ /song <name> - Download audio\n"
-        "▸ /stats - Bot statistics (Admin only)"
+        "▸ /stats - Bot statistics"
     )
 
 constants = Constants()

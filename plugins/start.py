@@ -11,7 +11,6 @@ logger = get_logger("StartPlugin")
 @app.on_message(filters.command("start"))
 @register_user
 async def start_handler(client, message):
-    # 🔥 Group mein command auto-delete karo
     if message.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
         try: await message.delete()
         except: pass
@@ -45,7 +44,6 @@ async def start_handler(client, message):
 @app.on_message(filters.command("help"))
 @register_user
 async def help_handler(client, message):
-    # 🔥 Group mein command auto-delete karo
     if message.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
         try: await message.delete()
         except: pass
@@ -57,7 +55,7 @@ async def help_handler(client, message):
         text=constants.HELP_TEXT,
         reply_markup=buttons,
         parse_mode=enums.ParseMode.HTML,
-        disable_web_page_preview=True
+        link_preview_options=None # 🔥 Fixed deprecation
     )
 
 @app.on_callback_query(filters.regex("help_menu|back_start"))
@@ -70,7 +68,7 @@ async def callback_help(client, query):
             text=constants.HELP_TEXT,
             reply_markup=buttons,
             parse_mode=enums.ParseMode.HTML,
-            disable_web_page_preview=True
+            link_preview_options=None
         )
     elif query.data == "back_start":
         buttons = [

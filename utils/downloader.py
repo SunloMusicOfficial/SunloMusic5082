@@ -3,9 +3,6 @@ import aiohttp
 import yt_dlp
 import os
 import time
-import re
-import json
-import tempfile
 from utils.logger import get_logger
 from config.settings import settings
 
@@ -18,79 +15,40 @@ class Downloader:
         duration = 0
         video_id = None
 
+        # 1. Use yt-dlp search (Lightweight, bypasses simple IP blocks)
         if not query.startswith("http"):
-            logger.info(f"🔍 Scraping YouTube for: {query}")
+            logger.info(f"🔍 Searching for: {query}")
             try:
-                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-                search_url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}+song"
-                
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(search_url, headers=headers, timeout=10) as resp:
-                        html = await resp.text()
-                        match = re.search(r'var ytInitialData = ({.*?});</script>', html, re.DOTALL)
-                        if match:
-                            data = json.loads(match.group(1))
-                            
-                            def find_videos(obj, results):
-                                if isinstance(obj, dict):
-                                    if "videoRenderer" in obj:
-                                        results.append(obj["videoRenderer"])
-                                    for k, v in obj.items():
-                                        find_videos(v, results)
-                                elif isinstance(obj, list):
-                                    for item in obj:
-                                        find_videos(item, results)
-                                return results
-                            
-                            renderers = find_videos(data, [])
-                            best_renderer = None
-                            for r in renderers:
-                                if "lengthText" in r:
-                                    dur_str = r["lengthText"]["simpleText"]
-                                    parts = list(map(int, dur_str.split(":")))
-                                    dur = 0
-                                    if len(parts) == 2: dur = parts[0]*60 + parts[1]
-                                    elif len(parts) == 3: dur = parts[0]*3600 + parts[1]*60 + parts[2]
-                                    
-                                    if 60 < dur < 900:
-                                        best_renderer = r
-                                        break
-                            
-                            if not best_renderer and renderers:
-                                best_renderer = renderers[0]
-
-                            if best_renderer:
-                                video_id = best_renderer["videoId"]
-                                video_url = f"https://www.youtube.com/watch?v={video_id}"
-                                title = best_renderer["title"]["runs"][0]["text"]
-                                if "lengthText" in best_renderer:
-                                    dur_str = best_renderer["lengthText"]["simpleText"]
-                                    parts = list(map(int, dur_str.split(":")))
-                                    if len(parts) == 2: duration = parts[0]*60 + parts[1]
-                                    elif len(parts) == 3: duration = parts[0]*3600 + parts[1]*60 + parts[2]
+                ydl_opts = {"quiet": True, "extract_flat": True, "default_search": "ytsearch1"}
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+                    if "entries" in info and info["entries"]:
+                        entry = info["entries"][0]
+                        if entry.get("id"):
+                            video_id = entry["id"]
+                            video_url = f"https://www.youtube.com/watch?v={video_id}"
+                            title = entry.get("title", query)
+                            duration = entry.get("duration", 0)
+                            logger.info(f"✅ Found URL: {video_url}")
             except Exception as e:
-                logger.warning(f"⚠️ Web Scraper failed: {e}")
+                logger.warning(f"⚠️ yt-dlp search failed: {e}")
 
         if query.startswith("http"):
             video_id = query.split("v=")[-1].split("&")[0]
 
-        if not video_id:
-            return None
-
-        # 🔥 FORCE RELIABLE THUMBNAIL (i.ytimg.com)
-        thumbnail = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
-
+        # Agar video_id nahi mila, toh API ko raw query bhejenge
         api_url = getattr(settings, "SUNLO_DOWNLOAD_API_URL", "")
         api_key = getattr(settings, "SUNLO_DOWNLOAD_API_KEY", "")
 
         if api_url and api_key:
-            logger.info(f"🚀 Requesting API for URL: {video_url}")
+            logger.info(f"🚀 Requesting API for: {video_url}")
             try:
                 os.makedirs("cache", exist_ok=True)
                 timestamp = int(time.time())
                 
                 async with aiohttp.ClientSession() as session:
-                    payload = {"url": video_url, "api_key": api_key, "type": "audio"}
+                    # API ko dono (url aur q) bhej rahe hain taaki jo bhi support kare kaam kare
+                    payload = {"url": video_url, "q": query, "api_key": api_key, "type": "audio"}
                     
                     async with session.post(f"{api_url.rstrip('/')}/download", json=payload, timeout=40) as resp:
                         if resp.status == 200:
@@ -100,7 +58,7 @@ class Downloader:
                                 data = await resp.json()
                                 stream_url = data.get("url") or data.get("link") or data.get("download_url")
                                 if stream_url:
-                                    return {"id": video_id, "title": data.get("title", title), "duration": data.get("duration", duration), "stream_url": stream_url, "thumbnail": thumbnail, "uploader": "API"}
+                                    return {"id": video_id or query, "title": data.get("title", title), "duration": data.get("duration", duration), "stream_url": stream_url, "thumbnail": data.get("thumbnail", f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None), "uploader": "API"}
                             else:
                                 ext = ".m4a" if "mp4" in content_type else ".mp3"
                                 file_path = f"cache/api_{timestamp}{ext}"
@@ -110,13 +68,15 @@ class Downloader:
                                 
                                 logger.info(f"✅ Saved: {file_path}")
                                 return {
-                                    "id": video_id, 
+                                    "id": video_id or query, 
                                     "title": title, 
                                     "duration": duration, 
                                     "stream_url": file_path,
-                                    "thumbnail": thumbnail, 
+                                    "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None, 
                                     "uploader": "API File"
                                 }
+                        else:
+                            logger.error(f"❌ API error {resp.status}")
             except Exception as e:
                 logger.error(f"❌ API failed: {e}")
 
