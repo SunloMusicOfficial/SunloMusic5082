@@ -7,36 +7,73 @@ from config.settings import settings
 
 logger = get_logger("KeepAlive")
 
-# 🔥 AAPKA SNAPDEPLOY URL (Ping ke liye)
-SUNLO_CUSTOM_API = "https://cobalt-658d8.containers.snapdeploy.app"
-
 async def self_ping(app):
-    render_url = settings.RENDER_EXTERNAL_URL
+    """Har 12 minute mein Render ko ping karega taaki sleep na ho."""
+    url = settings.RENDER_EXTERNAL_URL
     
-    if not render_url:
+    if not url:
         logger.warning("⚠️ RENDER_EXTERNAL_URL not found. Self-ping disabled.")
         return
 
-    logger.info(f"💓 Keep-Alive active for Render & Cobalt API")
+    logger.info(f"💓 Keep-Alive active for Render (12 min interval). Target: {url}")
     
+    # Startup Message (Premium)
+    if settings.LOG_GROUP_ID != 0:
+        try:
+            await app.send_message(
+                settings.LOG_GROUP_ID, 
+                "💓 <b>𝐑𝐄𝐍𝐃𝐄𝐑 𝐊𝐄𝐄𝐏-𝐀𝐋𝐈𝐕𝐄 𝐀𝐂𝐓𝐈𝐕𝐄</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                f"🌐 <b>Target:</b> <code>{url}</code>\n"
+                f"⏱ <b>Interval:</b> <code>Every 12 Minutes</code>\n"
+                "🛡 <b>Purpose:</b> <i>Preventing Render Sleep</i>\n"
+                "━━━━━━━━━━━━━━━━━━━━", 
+                parse_mode=enums.ParseMode.HTML
+            )
+        except Exception as e:
+            logger.error(f"Failed to send startup ping log: {e}")
+
     async with aiohttp.ClientSession() as session:
         while True:
-            # 1. Render Ko Ping Karo (Bot ko zinda rakhne ke liye)
+            start_time = time.time()
             try:
-                async with session.get(render_url, timeout=15) as resp:
-                    if resp.status == 200:
-                        logger.info(f"✅ Render Ping Success")
+                async with session.get(url, timeout=15) as resp:
+                    latency = round((time.time() - start_time) * 1000, 2)
+                    status_text = "✅ <b>𝐏𝐈𝐍𝐆 𝐒𝐔𝐂𝐂𝐄𝐒𝐒</b>" if resp.status == 200 else f"⚠️ <b>𝐖𝐀𝐑𝐍𝐈𝐍𝐆: {resp.status}</b>"
+                    
+                    logger.info(f"Self-ping: {resp.status} ({latency}ms)")
+                    
+                    # Premium Log Message
+                    if settings.LOG_GROUP_ID != 0:
+                        try:
+                            await app.send_message(
+                                settings.LOG_GROUP_ID,
+                                f"{status_text}\n"
+                                f"━━━━━━━━━━━━━━━━━━━━\n"
+                                f"📡 <b>Response:</b> <code>{resp.status} OK</code>\n"
+                                f"⚡ <b>Latency:</b> <code>{latency} ms</code>\n"
+                                f"🟢 <b>Status:</b> <code>Bot is Awake</code>\n"
+                                f"━━━━━━━━━━━━━━━━━━━━", 
+                                parse_mode=enums.ParseMode.HTML
+                            )
+                        except Exception as e:
+                            pass # Ignore log send errors to keep loop running
+                            
             except Exception as e:
-                logger.error(f"❌ Render Ping Failed: {e}")
-
-            # 2. SnapDeploy Cobalt Ko Ping Karo (API ko sone se rokne ke liye)
-            try:
-                # Root URL check karne se container wake rehta hai
-                async with session.get(SUNLO_CUSTOM_API, timeout=15) as resp:
-                    if resp.status == 200:
-                        logger.info(f"✅ Cobalt API Ping Success (Awake)")
-            except Exception as e:
-                logger.warning(f"⚠️ Cobalt API Ping Failed: {e}")
+                logger.error(f"Self-ping failed: {e}")
+                if settings.LOG_GROUP_ID != 0:
+                    try:
+                        await app.send_message(
+                            settings.LOG_GROUP_ID,
+                            f"🚨 <b>𝐏𝐈𝐍𝐆 𝐅𝐀𝐈𝐋𝐄𝐃</b> 🚨\n"
+                            f"━━━━━━━━━━━━━━━━━━━━\n"
+                            f"❌ <b>Error:</b> <code>{str(e)[:100]}</code>\n"
+                            f"🔴 <b>Action:</b> <i>Render might be down!</i>\n"
+                            f"━━━━━━━━━━━━━━━━━━━━", 
+                            parse_mode=enums.ParseMode.HTML
+                        )
+                    except Exception as e:
+                        pass
             
-            # 10 minute wait
-            await asyncio.sleep(600)
+            # 🔥 12 Minutes (720 seconds) wait
+            await asyncio.sleep(720)
