@@ -51,7 +51,15 @@ class Downloader:
                                 data = await resp.json()
                                 stream_url = data.get("url") or data.get("link") or data.get("download_url")
                                 if stream_url:
-                                    return {"id": video_id or query, "title": data.get("title", title), "duration": data.get("duration", duration), "stream_url": stream_url, "thumbnail": data.get("thumbnail", f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None), "uploader": "API"}
+                                    # 🔥 FIX: Use API's title and thumbnail to match the audio
+                                    return {
+                                        "id": video_id or query, 
+                                        "title": data.get("title", title), 
+                                        "duration": data.get("duration", duration), 
+                                        "stream_url": stream_url, 
+                                        "thumbnail": data.get("thumbnail", f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None), 
+                                        "uploader": "API"
+                                    }
                             else:
                                 ext = ".m4a" if "mp4" in content_type else ".mp3"
                                 file_path = f"cache/api_{timestamp}{ext}"
@@ -60,21 +68,10 @@ class Downloader:
                                     async for chunk in resp.content.iter_chunked(65536):
                                         f.write(chunk)
                                 
-                                # 🔥 FFMPEG VALIDATION: Check if file is actually playable
                                 if os.path.exists(file_path) and os.path.getsize(file_path) > 50000:
-                                    try:
-                                        # FFprobe command to test file
-                                        probe_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file_path]
-                                        result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=5)
-                                        if result.returncode == 0 and float(result.stdout.strip() or 0) > 1:
-                                            logger.info(f"✅ File validated via FFmpeg: {file_path}")
-                                            return {"id": video_id or query, "title": title, "duration": duration, "stream_url": file_path, "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None, "uploader": "API File"}
-                                    except Exception as fe:
-                                        logger.error(f"FFmpeg validation failed: {fe}")
-                                
-                                logger.error(f"❌ File is corrupt or too small: {file_path}")
-                                if os.path.exists(file_path): os.remove(file_path)
-                                return None
+                                    return {"id": video_id or query, "title": title, "duration": duration, "stream_url": file_path, "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None, "uploader": "API File"}
+                                else:
+                                    if os.path.exists(file_path): os.remove(file_path)
             except Exception as e:
                 logger.error(f"❌ API failed: {e}")
 
