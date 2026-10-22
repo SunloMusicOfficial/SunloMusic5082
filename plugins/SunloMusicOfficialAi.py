@@ -34,6 +34,13 @@ SYSTEM_PROMPT = (
     "Do NOT use any markdown formatting like bolding or italics, just plain text."
 )
 
+# 🔥 FALLBACK CHAIN (Primary -> Fallback 1 -> Fallback 2)
+MODEL_CHAIN = [
+    "gemini-3.8-flash",       # Primary
+    "gemini-3.5-flash-lite",  # Fallback 1 (Lighter, less load)
+    "gemini-4-argon"          # Fallback 2 (Alternative powerful model)
+]
+
 def get_assistant_buttons():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 ᴛʀʏ ᴀɢᴀɪɴ", callback_data="ai_regen"),
@@ -42,17 +49,22 @@ def get_assistant_buttons():
 
 async def get_ai_response(chat_id, text, image_path=None):
     if chat_id not in chat_sessions:
-        # 🔥 PRIMARY: Latest gemini-3.8-flash
         chat_sessions[chat_id] = {
-            "chat": ai_client.chats.create(model="gemini-3.8-flash"),
+            "model_idx": 0,
+            "chat": None,
             "last_query": "",
             "last_img": None
         }
+        # Initialize first model
+        model_name = MODEL_CHAIN[0]
+        chat_sessions[chat_id]["chat"] = ai_client.chats.create(model=model_name)
         await asyncio.to_thread(chat_sessions[chat_id]["chat"].send_message, SYSTEM_PROMPT)
     
-    chat = chat_sessions[chat_id]["chat"]
+    session = chat_sessions[chat_id]
+    chat = session["chat"]
     
-    max_retries = 2
+    # 🔥 RETRY & FALLBACK LOGIC (For 503 Errors)
+    max_retries = 3
     for attempt in range(max_retries):
         try:
             if image_path and os.path.exists(image_path):
@@ -63,18 +75,27 @@ async def get_ai_response(chat_id, text, image_path=None):
             else:
                 response = await asyncio.to_thread(chat.send_message, text)
                 
-            chat_sessions[chat_id]["last_query"] = text
-            chat_sessions[chat_id]["last_img"] = image_path
+            session["last_query"] = text
+            session["last_img"] = image_path
             return response.text
             
         except Exception as e:
-            if "503" in str(e) and attempt < max_retries - 1:
-                logger.warning(f"⚠️ 503 on 3.8-flash. Retrying with fallback model...")
-                # 🔥 FALLBACK: Switch to lighter model
-                chat_sessions[chat_id]["chat"] = ai_client.chats.create(model="gemini-3.5-flash-lite")
-                await asyncio.to_thread(chat_sessions[chat_id]["chat"].send_message, SYSTEM_PROMPT)
-                chat = chat_sessions[chat_id]["chat"]
-                await asyncio.sleep(1)
+            err_msg = str(e)
+            if "503" in err_msg or "UNAVAILABLE" in err_msg:
+                # 🔥 Switch to next model in chain
+                if session["model_idx"] < len(MODEL_CHAIN) - 1:
+                    session["model_idx"] += 1
+                    new_model = MODEL_CHAIN[session["model_idx"]]
+                    logger.warning(f"⚠️ 503 on {MODEL_CHAIN[session['model_idx']-1]}. Switching to fallback: {new_model}")
+                    
+                    session["chat"] = ai_client.chats.create(model=new_model)
+                    await asyncio.to_thread(session["chat"].send_message, SYSTEM_PROMPT)
+                    chat = session["chat"]
+                    await asyncio.sleep(1) # Small delay before retry
+                else:
+                    # All models failed
+                    logger.error("❌ All AI models are overloaded (503).")
+                    raise e
             else:
                 raise e
 
