@@ -1,33 +1,19 @@
 import asyncio
 import importlib
 import sys
-import time
 from pathlib import Path
-
-try:
-    import uvloop
-    uvloop.install()
-except ImportError:
-    pass
-
 from ftmgram import idle, enums
-from ftmgram.errors import FloodWait
+from pytgcalls.types import Update
+from pytgcalls.types.stream import StreamAudioEnded, StreamVideoEnded
 from config.settings import settings
 from core.bot import app
 from core.userbot import userbot
 import core.calls as calls_module
 from core.database import db
-from core.health import health_monitor
 from utils.logger import get_logger
 from utils.keep_alive import self_ping
 from utils.player_state import send_now_playing_card, delete_active_card
-from plugins.queue import current_songs
-
-try:
-    from pytgcalls.types import Update, StreamEnded
-except ImportError:
-    from pytgcalls.types import Update
-    StreamEnded = "stream_ended"
+from plugins.queue import current_songs, play_next_in_queue
 
 logger = get_logger("SunloMusic")
 PLUGINS_DIR = Path("plugins")
@@ -42,15 +28,12 @@ def load_plugins():
             loaded.append(file.stem)
         except Exception as e:
             print(f"❌ Failed to load {file.stem}: {e}")
-            logger.error(f"❌ Failed to load {file.stem}: {e}")
     return loaded
 
 async def send_log(text):
     if settings.LOG_GROUP_ID != 0:
-        try:
-            await app.send_message(settings.LOG_GROUP_ID, text, parse_mode=enums.ParseMode.HTML)
-        except Exception as e:
-            logger.error(f"Log group error: {e}")
+        try: await app.send_message(settings.LOG_GROUP_ID, text, parse_mode=enums.ParseMode.HTML)
+        except: pass
 
 async def startup():
     print("""
@@ -59,31 +42,11 @@ async def startup():
     ║     Fastest • Lightweight • Premium       ║
     ╚══════════════════════════════════════════╝
     """)
-    
     settings.validate()
+    await app.start()
+    await userbot.start()
+    await db.connect()
     
-    print("⏳ Starting Bot & Userbot...")
-    try:
-        await app.start()
-        await userbot.start()
-    except FloodWait as e:
-        print(f"🛑 FloodWait: {e.value} seconds.")
-        sys.exit(1)
-    except Exception as e:
-        print(f"❌ Failed to start: {e}")
-        sys.exit(1)
-    
-    me = await app.get_me()
-    user_me = await userbot.get_me()
-    
-    print("🗄️ Connecting to Database...")
-    try:
-        await db.connect()
-    except Exception as e:
-        print(f"❌ Database failed: {e}")
-        sys.exit(1)
-    
-    print("📞 Starting Voice Engine...")
     from pytgcalls import PyTgCalls
     calls_module.calls = PyTgCalls(userbot)
     await calls_module.calls.start()
@@ -91,45 +54,44 @@ async def startup():
     @calls_module.calls.on_update()
     async def stream_handler(client, update: Update):
         try:
-            if update.status == StreamEnded or str(update.status) == "stream_ended":
+            # 🔥 FIX: PyTgCalls v3 StreamEnded check
+            if isinstance(update, StreamAudioEnded) or isinstance(update, StreamVideoEnded):
                 chat_id = update.chat_id
-                print(f"🎵 Song ended in {chat_id}. Checking queue...")
+                print(f"🎵 Song ended in {chat_id}.")
                 
-                from plugins.queue import play_next_in_queue
                 try:
-                    next_song = await asyncio.wait_for(play_next_in_queue(chat_id), timeout=20)
+                    next_song = await asyncio.wait_for(play_next_in_queue(chat_id), timeout=15)
                     if next_song:
                         await send_now_playing_card(app, chat_id, next_song)
+                    else:
+                        await calls_module.calls.leave_call(chat_id)
+                        await delete_active_card(chat_id)
+                        print(f"🚪 Auto left VC in {chat_id}")
                 except Exception as e:
-                    print(f"Stream end error: {e}")
+                    print(f"Queue empty or error: {e}")
                     try: await calls_module.calls.leave_call(chat_id)
                     except: pass
                     await delete_active_card(chat_id)
         except Exception as e:
             print(f"Update handler error: {e}")
             
-    print("🔌 Loading Plugins...")
     plugins = load_plugins()
     print(f"✅ {len(plugins)} Plugins Loaded.")
-    
-    asyncio.create_task(health_monitor(app, userbot))
     asyncio.create_task(self_ping(app))
     
-    # 🔥 RESTORED START MESSAGES
-    await send_log(f"🤖 <b>𝐀𝐒𝐒𝐈𝐒𝐓𝐀𝐍𝐓 𝐔𝐒𝐄𝐑𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n👤 <b>Name:</b> {user_me.first_name}\n🆔 <b>ID:</b> <code>{user_me.id}</code>")
-    await send_log(f"🚀 <b>𝐒𝐔𝐍𝐋𝐎 𝐌𝐔𝐒𝐈𝐂 𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n🤖 <b>Bot:</b> @{me.username}\n⚙️ <b>Plugins:</b> <code>{len(plugins)} Loaded</code>")
-    
+    me = await app.get_me()
+    user_me = await userbot.get_me()
+    await send_log(f"🤖 <b>𝐀𝐒𝐒𝐈𝐒𝐓𝐀𝐍𝐓 𝐔𝐒𝐄𝐑𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n👤 <b>Name:</b> {user_me.first_name}")
+    await send_log(f"🚀 <b>𝐒𝐔𝐍𝐋𝐎 𝐌𝐔𝐒𝐈𝐂 𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n🤖 <b>Bot:</b> @{me.username}")
     print("🚀 Sunlo Music is ready to rock!")
 
 async def shutdown():
-    print("🛑 Shutting down gracefully...")
     try:
         if calls_module.calls: await calls_module.calls.stop()
         await app.stop()
         await userbot.stop()
         await db.disconnect()
     except: pass
-    print("👋 Goodbye!")
 
 async def main():
     try:

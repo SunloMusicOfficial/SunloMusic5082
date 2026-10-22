@@ -11,17 +11,22 @@ async def welcome_and_invite(client, message):
     for member in message.new_chat_members:
         if member.id == me.id:
             try:
-                # Check if bot is admin
+                # 1. Check if bot is admin
                 bot_member = await client.get_chat_member(message.chat.id, me.id)
                 if bot_member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]:
                     userbot_me = await userbot.get_me()
                     
-                    # Check if Assistant is already in group
+                    # 2. 🔥 FIX: Send a DM to Assistant first to make Peer ID valid
+                    try:
+                        await client.send_message(userbot_me.id, "/start")
+                    except: pass
+                    
+                    # 3. Check if Assistant is already in group
                     try:
                         await client.get_chat_member(message.chat.id, userbot_me.id)
                         logger.info("Assistant already in group.")
                     except:
-                        # Invite Assistant
+                        # 4. Invite Assistant
                         await client.add_chat_members(message.chat.id, userbot_me.id)
                         logger.info(f"✅ Assistant added to {message.chat.id}")
                         await message.reply_text("🤖 **Assistant account added successfully!**")

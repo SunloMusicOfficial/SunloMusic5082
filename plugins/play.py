@@ -54,6 +54,8 @@ async def play_song_by_id(client, message, m, song, is_video=False):
     title_short = song.get('title', 'Unknown')[:35] + "..." if len(song.get('title', 'Unknown')) > 35 else song.get('title', 'Unknown')
 
     active_calls = await calls_module.calls.calls
+    
+    # 🔥 FIX: If Queue is active, don't leave VC, just add to queue
     if chat_id in active_calls and chat_id in current_songs:
         await add_to_queue(chat_id, song)
         queue_caption = (
@@ -79,14 +81,11 @@ async def play_song_by_id(client, message, m, song, is_video=False):
     except: pass
     
     try:
-        # 🔥 FIX: Double Cleanup to clear PyTgCalls stuck state (especially after /video)
+        # 🔥 FIX: Leave VC and wait 3 seconds for Telegram to process CHANNEL_INVALID
         if chat_id in active_calls:
             try: await asyncio.wait_for(calls_module.calls.leave_call(chat_id), timeout=5)
             except: pass
-            await asyncio.sleep(1)
-        try: await asyncio.wait_for(calls_module.calls.leave_call(chat_id), timeout=5)
-        except: pass
-        await asyncio.sleep(1)
+            await asyncio.sleep(3) # Vital Gap for Pyrogram to refresh channel cache
 
         stream_url = song['stream_url']
         if not stream_url.startswith("http"):
@@ -94,7 +93,6 @@ async def play_song_by_id(client, message, m, song, is_video=False):
             if not os.path.exists(stream_url) or os.path.getsize(stream_url) < 5000:
                 return await m.edit_text("❌ <b>Audio file is corrupted or empty.</b>", parse_mode=enums.ParseMode.HTML)
 
-        # 🔥 FIX: Increased timeout to 25 seconds to allow engine to recover
         await asyncio.wait_for(calls_module.calls.play(chat_id, MediaStream(stream_url)), timeout=25)
         
         current_songs[chat_id] = song
