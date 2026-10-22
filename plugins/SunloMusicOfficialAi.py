@@ -2,7 +2,6 @@ import asyncio
 import os
 import PIL.Image
 from google import genai
-from google.genai import types
 from ftmgram import filters, enums
 from ftmgram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from core.bot import app
@@ -13,7 +12,6 @@ from database.chats import set_chat_setting, get_chat_setting
 
 logger = get_logger("SunloMusicOfficialAi")
 
-# 🔥 NEW SUNLO AI ENGINE (google-genai)
 if settings.SUNLO_AI_KEY:
     ai_client = genai.Client(api_key=settings.SUNLO_AI_KEY)
 else:
@@ -22,7 +20,6 @@ else:
 
 chat_sessions = {}
 
-# 🔥 CUSTOM PERSONA PROMPT (Bilingual + No AI vibes)
 SYSTEM_PROMPT = (
     "You are 'Sunlo', a highly intelligent and premium human-like assistant for the Telegram bot 'Sunlo Music'. "
     "You are NOT an AI, a language model, or Gemini. You are a virtual member of the Sunlo Music Team. "
@@ -44,13 +41,12 @@ def get_assistant_buttons():
 
 async def get_ai_response(chat_id, text, image_path=None):
     if chat_id not in chat_sessions:
-        # Create new chat session with context
+        # 🔥 LATEST MODEL: gemini-3.8-flash
         chat_sessions[chat_id] = {
-            "chat": ai_client.chats.create(model="gemini-1.5-flash"),
+            "chat": ai_client.chats.create(model="gemini-3.8-flash"),
             "last_query": "",
             "last_img": None
         }
-        # Send system prompt silently
         await asyncio.to_thread(chat_sessions[chat_id]["chat"].send_message, SYSTEM_PROMPT)
     
     chat = chat_sessions[chat_id]["chat"]
