@@ -3,6 +3,7 @@ from ftmgram import filters, enums
 from ftmgram.types import CallbackQuery
 from core.bot import app
 import core.calls as calls_module
+from pytgcalls.types import MediaStream
 from plugins.queue import play_next_in_queue, current_songs
 from utils.decorators import register_user
 from utils.logger import get_logger
@@ -136,21 +137,22 @@ async def controls_callback(client, query: CallbackQuery):
             if chat_id not in playback_start_times: 
                 return await query.answer("❌ No active stream.")
             
+            song = current_songs.get(chat_id, {})
+            stream_url = song.get('stream_url')
             current_time = int(time.time() - playback_start_times[chat_id])
             seek_sec = -10 if data == "seek_m10" else 10
             new_time = max(0, current_time + seek_sec)
             
-            # 🔥 FIX: PyTgCalls v3 Seek Method
+            # 🔥 FIX: Seek by replaying from new time using FFmpeg arguments
             try:
-                # Naya tarika seek karne ka
-                await calls_module.calls.seek_stream(chat_id, new_time)
+                ffmpeg_args = f"-ss {new_time}"
+                await calls_module.calls.play(chat_id, MediaStream(stream_url, ffmpeg_parameters=ffmpeg_args))
                 playback_start_times[chat_id] = time.time() - new_time
                 await query.answer(f"⏩ Seeked to {new_time}s")
-                song = current_songs.get(chat_id, {})
                 await query.message.edit_reply_markup(reply_markup=get_expanded_buttons(chat_id, new_time, song.get('duration', 0)))
             except Exception as seek_err:
                 logger.error(f"Seek error: {seek_err}")
-                await query.answer("❌ Seeking not supported by engine.", show_alert=True)
+                await query.answer("❌ Seeking failed.", show_alert=True)
             
     except Exception as e:
         logger.error(f"Callback error: {e}")

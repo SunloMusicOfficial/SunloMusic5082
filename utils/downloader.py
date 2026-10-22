@@ -17,16 +17,23 @@ class Downloader:
 
         if not query.startswith("http"):
             try:
+                # 🔥 FIX: ytsearch1 use karo, but check if it's a song
                 ydl_opts = {"quiet": True, "extract_flat": True, "default_search": "ytsearch1"}
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+                    info = ydl.extract_info(f"ytsearch1:{query} song", download=False)
                     if "entries" in info and info["entries"]:
                         entry = info["entries"][0]
+                        dur = entry.get("duration", 0)
+                        # Agar 15 min se lamba hai, toh reject karo (podcast)
+                        if dur > 900:
+                            logger.warning("⚠️ Found long video (podcast), rejecting.")
+                            return None
+                            
                         if entry.get("id"):
                             video_id = entry["id"]
                             video_url = f"https://www.youtube.com/watch?v={video_id}"
                             title = entry.get("title", query)
-                            duration = entry.get("duration", 0)
+                            duration = dur
             except Exception as e:
                 logger.warning(f"⚠️ Search failed: {e}")
 
@@ -52,7 +59,6 @@ class Downloader:
                                 data = await resp.json()
                                 stream_url = data.get("url") or data.get("link") or data.get("download_url")
                                 if stream_url:
-                                    # 🔥 FIX: API ka thumbnail, title use karo
                                     return {
                                         "id": video_id or query, 
                                         "title": data.get("title", title), 
