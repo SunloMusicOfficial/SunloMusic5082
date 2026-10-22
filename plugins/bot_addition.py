@@ -11,24 +11,29 @@ async def welcome_and_invite(client, message):
     for member in message.new_chat_members:
         if member.id == me.id:
             try:
-                # 1. Check if bot is admin
+                # Check if bot is admin
                 bot_member = await client.get_chat_member(message.chat.id, me.id)
                 if bot_member.status in [enums.ChatMemberStatus.ADMINISTRATOR, enums.ChatMemberStatus.OWNER]:
                     userbot_me = await userbot.get_me()
                     
-                    # 2. 🔥 FIX: Send a DM to Assistant first to make Peer ID valid
-                    try:
-                        await client.send_message(userbot_me.id, "/start")
-                    except: pass
-                    
-                    # 3. Check if Assistant is already in group
+                    # 🔥 FIX: Check if Assistant is already there
                     try:
                         await client.get_chat_member(message.chat.id, userbot_me.id)
                         logger.info("Assistant already in group.")
-                    except:
-                        # 4. Invite Assistant
-                        await client.add_chat_members(message.chat.id, userbot_me.id)
-                        logger.info(f"✅ Assistant added to {message.chat.id}")
-                        await message.reply_text("🤖 **Assistant account added successfully!**")
+                    except Exception as e:
+                        if "USER_NOT_PARTICIPANT" in str(e) or "NOT_FOUND" in str(e):
+                            # Assistant is not in group, try to add
+                            try:
+                                await client.add_chat_members(message.chat.id, userbot_me.id)
+                                logger.info(f"✅ Assistant added to {message.chat.id}")
+                                await message.reply_text("🤖 **Assistant account added successfully!**")
+                            except Exception as add_err:
+                                logger.warning(f"⚠️ Could not auto-invite Assistant: {add_err}")
+                                await message.reply_text(
+                                    f"⚠️ **Could not auto-invite Assistant.**\n"
+                                    f"Please add `@{userbot_me.username}` manually to the group.\n\n"
+                                    f"<b>Reason:</b> <code>{add_err}</code>",
+                                    parse_mode=enums.ParseMode.HTML
+                                )
             except Exception as e:
-                logger.warning(f"⚠️ Could not auto-invite Assistant: {e}")
+                logger.warning(f"⚠️ BotAddition error: {e}")
