@@ -1,4 +1,5 @@
-import asyncio, time, re
+
+import asyncio, time, re, os
 from ftmgram import filters, enums
 from ftmgram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pytgcalls.types import MediaStream
@@ -82,13 +83,7 @@ async def play_handler(client, message):
 
 async def play_song_by_id(client, message, m, song, is_video=False):
     chat_id = message.chat.id
-    active_calls = await calls_module.calls.calls
     
-    # 🔥 FIX: Agar bot VC me hai par gaana nahi chal raha (stuck), toh use clear karo
-    if chat_id in active_calls and chat_id not in current_songs:
-        logger.warning(f"⚠️ Clearing stuck VC state for {chat_id}")
-        active_calls.pop(chat_id, None)
-
     dur_str = get_time_str(song.get('duration', 0))
     title_short = song.get('title', 'Unknown')[:35] + "..." if len(song.get('title', 'Unknown')) > 35 else song.get('title', 'Unknown')
 
@@ -101,22 +96,40 @@ async def play_song_by_id(client, message, m, song, is_video=False):
         f"<code>00:00</code> {generate_bar(0, song.get('duration', 0))} <code>{dur_str}</code>"
     )
 
-    if chat_id in active_calls:
-        # Queue System
+    # Queue Logic (Agar gaana pehle se chal raha hai)
+    active_calls = await calls_module.calls.calls
+    if chat_id in active_calls and chat_id in current_songs:
         await add_to_queue(chat_id, song)
-        await m.edit_text(f"📥 <b>𝐀𝐝𝐝𝐞𝐝 𝐭𝐨 𝐐𝐮𝐞𝐮𝐞 :</b>\n🎵 {title_short}", parse_mode=enums.ParseMode.HTML)
-    else:
-        # Direct Play
-        await m.edit_text("▸ <b>𝐂𝐨𝐧𝐧𝐞𝐜𝐭𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
+        return await m.edit_text(f"📥 <b>𝐀𝐝𝐝𝐞𝐝 𝐭𝐨 𝐐𝐮𝐞𝐮𝐞 :</b>\n🎵 {title_short}", parse_mode=enums.ParseMode.HTML)
+
+    # Direct Play Logic
+    await m.edit_text("▸ <b>𝐂𝐨𝐧𝐧𝐞𝐜𝐭𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
+    try:
+        # 🔥 FIX: Pehle forcefully VC se leave karo (agar stuck hai toh)
         try:
-            await calls_module.calls.play(chat_id, MediaStream(song['stream_url']))
-            current_songs[chat_id] = song
-            playback_start_times[chat_id] = time.time()
-            btns = get_player_buttons(chat_id)
-            
-            sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
-            if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
-            live_timer_tasks[chat_id] = asyncio.create_task(update_live_timer(chat_id, sent_msg, song.get('duration', 0)))
-        except Exception as e:
-            logger.error(f"Play error: {e}")
-            await m.edit_text(f"❌ <b>ꜰᴀɪʟᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴠᴄ.</b>\n<code>{e}</code>", parse_mode=enums.ParseMode.HTML)
+            await calls_module.calls.leave_call(chat_id)
+            await asyncio.sleep(1)
+        except:
+            pass
+
+        # 🔥 FIX: Local file ka absolute path banao
+        stream_url = song['stream_url']
+        if not stream_url.startswith("http"):
+            stream_url = os.path.abspath(stream_url)
+
+        # Naya stream play karo
+        await calls_module.calls.play(chat_id, MediaStream(stream_url))
+        
+        current_songs[chat_id] = song
+        playback_start_times[chat_id] = time.time()
+        btns = get_player_buttons(chat_id)
+        
+        sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
+        
+        if chat_id in live_timer_tasks: 
+            live_timer_tasks[chat_id].cancel()
+        live_timer_tasks[chat_id] = asyncio.create_task(update_live_timer(chat_id, sent_msg, song.get('duration', 0)))
+        
+    except Exception as e:
+        logger.error(f"Play error: {e}")
+        await m.edit_text(f"❌ <b>ꜰᴀɪʟᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴠᴄ.</b>\n<code>{e}</code>", parse_mode=enums.ParseMode.HTML)
