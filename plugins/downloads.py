@@ -1,45 +1,100 @@
 import os
+import aiohttp
 from ftmgram import filters, enums
 from core.bot import app
+from config.settings import settings
 from utils.decorators import register_user
 from utils.downloader import downloader
-from utils.logger import get_logger
-
-logger = get_logger("Downloaders")
-
-@app.on_message(filters.command(["ig", "insta"]) & filters.private)
-@register_user
-async def insta_dl(client, message):
-    if len(message.command) < 2: return await message.reply_text("📸 **Usage:** `/ig <reels link>`")
-    url = message.command[1]
-    m = await message.reply_text("📥 <b>𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝𝐢𝐧𝐠 𝐑𝐞𝐞𝐥𝐬...</b>", parse_mode=enums.ParseMode.HTML)
-    
-    try:
-        opts = {"format": "best", "outtmpl": f"cache/%(id)s.%(ext)s", "quiet": True}
-        import yt_dlp
-        ydl = yt_dlp.YoutubeDL(opts)
-        info = ydl.extract_info(url, download=True)
-        file_path = ydl.prepare_filename(info)
-        
-        await message.reply_video(video=file_path, caption=f"✅ <b>Downloaded</b>", parse_mode=enums.ParseMode.HTML)
-        await m.delete()
-        os.remove(file_path)
-    except Exception as e:
-        await m.edit_text(f"❌ <b>Error:</b> {e}")
 
 @app.on_message(filters.command("song") & filters.private)
 @register_user
 async def song_dl(client, message):
     if len(message.command) < 2: return await message.reply_text("🎵 **ᴜꜱᴀɢᴇ:** `/song <name>`")
-    m = await message.reply_text("🔍 <b>𝐅𝐢𝐧𝐝𝐢𝐧𝐠 𝐲𝐨𝐮𝐫 𝐬𝐨𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
     
-    song = await downloader.search_multiple(" ".join(message.command[1:]), limit=1)
-    if not song: return await m.edit_text("❌ ɴᴏᴛ ꜰᴏᴜɴᴅ!")
+    m = await message.reply_text("🔍 **Searching & Downloading...**")
     
-    await m.edit_text("📥 <b>𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝𝐢𝐧𝐠 𝐚𝐮𝐝𝐢𝐨...</b>", parse_mode=enums.ParseMode.HTML)
-    file_path = await downloader.download_media(song[0]['id'], is_video=False)
+    # Get Video ID via yt-dlp search
+    video_url = " ".join(message.command[1:])
+    song_info = await downloader.search_and_extract(video_url)
+    if not song_info:
+        return await m.edit_text("❌ **Song not found!**")
+        
+    video_id = song_info['id']
+    title = song_info['title']
     
-    if file_path and os.path.exists(file_path):
-        await message.reply_audio(audio=file_path, title=song[0]['title'], performer=song[0]['uploader'])
-        await m.delete()
-    else: await m.edit_text("❌ ᴅᴏᴡɴʟᴏᴀᴅ ꜰᴀɪʟᴇᴅ.")
+    api_url = getattr(settings, "SUNLO_DOWNLOAD_API_URL", "")
+    api_key = getattr(settings, "SUNLO_DOWNLOAD_API_KEY", "")
+    
+    try:
+        os.makedirs("cache", exist_ok=True)
+        file_path = f"cache/song_{video_id}.mp3"
+        
+        async with aiohttp.ClientSession() as session:
+            payload = {"url": f"https://youtube.com/watch?v={video_id}", "api_key": api_key, "type": "audio"}
+            async with session.post(f"{api_url.rstrip('/')}/download", json=payload, timeout=120) as resp:
+                if resp.status == 200:
+                    content_type = resp.headers.get("Content-Type", "")
+                    if "application/json" in content_type:
+                        data = await resp.json()
+                        stream_url = data.get("url") or data.get("link")
+                        if stream_url:
+                            async with session.get(stream_url) as file_resp:
+                                with open(file_path, "wb") as f:
+                                    async for chunk in file_resp.content.iter_chunked(65536):
+                                        f.write(chunk)
+                    else:
+                        with open(file_path, "wb") as f:
+                            async for chunk in resp.content.iter_chunked(65536):
+                                f.write(chunk)
+                                
+                    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                        await message.reply_audio(audio=file_path, title=title, performer="Sunlo Music")
+                        await m.delete()
+                        os.remove(file_path)
+                    else:
+                        await m.edit_text("❌ Download failed. File is empty.")
+                else:
+                    await m.edit_text(f"❌ API Error: {resp.status}")
+    except Exception as e:
+        await m.edit_text(f"❌ Error: {e}")
+
+@app.on_message(filters.command("video") & filters.private)
+@register_user
+async def video_dl(client, message):
+    if len(message.command) < 2: return await message.reply_text("🎬 **ᴜꜱᴀɢᴇ:** `/video <name>`")
+    # Same logic as above, just change "type": "audio" to "type": "video" and reply_video
+    m = await message.reply_text("🔍 **Searching & Downloading Video...**")
+    
+    video_url = " ".join(message.command[1:])
+    song_info = await downloader.search_and_extract(video_url)
+    if not song_info:
+        return await m.edit_text("❌ **Video not found!**")
+        
+    video_id = song_info['id']
+    title = song_info['title']
+    
+    api_url = getattr(settings, "SUNLO_DOWNLOAD_API_URL", "")
+    api_key = getattr(settings, "SUNLO_DOWNLOAD_API_KEY", "")
+    
+    try:
+        os.makedirs("cache", exist_ok=True)
+        file_path = f"cache/video_{video_id}.mp4"
+        
+        async with aiohttp.ClientSession() as session:
+            payload = {"url": f"https://youtube.com/watch?v={video_id}", "api_key": api_key, "type": "video"}
+            async with session.post(f"{api_url.rstrip('/')}/download", json=payload, timeout=180) as resp:
+                if resp.status == 200:
+                    with open(file_path, "wb") as f:
+                        async for chunk in resp.content.iter_chunked(65536):
+                            f.write(chunk)
+                                
+                    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                        await message.reply_video(video=file_path, caption=f"🎬 {title}")
+                        await m.delete()
+                        os.remove(file_path)
+                    else:
+                        await m.edit_text("❌ Download failed. File is empty.")
+                else:
+                    await m.edit_text(f"❌ API Error: {resp.status}")
+    except Exception as e:
+        await m.edit_text(f"❌ Error: {e}")
