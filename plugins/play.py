@@ -1,4 +1,3 @@
-
 import asyncio, time, re, os
 from ftmgram import filters, enums
 from ftmgram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -96,36 +95,40 @@ async def play_song_by_id(client, message, m, song, is_video=False):
         f"<code>00:00</code> {generate_bar(0, song.get('duration', 0))} <code>{dur_str}</code>"
     )
 
-    # Queue Logic (Agar gaana pehle se chal raha hai)
     active_calls = await calls_module.calls.calls
     if chat_id in active_calls and chat_id in current_songs:
         await add_to_queue(chat_id, song)
         return await m.edit_text(f"📥 <b>𝐀𝐝𝐝𝐞𝐝 𝐭𝐨 𝐐𝐮𝐞𝐮𝐞 :</b>\n🎵 {title_short}", parse_mode=enums.ParseMode.HTML)
 
-    # Direct Play Logic
     await m.edit_text("▸ <b>𝐂𝐨𝐧𝐧𝐞𝐜𝐭𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
     try:
-        # 🔥 FIX: Pehle forcefully VC se leave karo (agar stuck hai toh)
         try:
             await calls_module.calls.leave_call(chat_id)
             await asyncio.sleep(1)
-        except:
-            pass
+        except: pass
 
-        # 🔥 FIX: Local file ka absolute path banao
         stream_url = song['stream_url']
         if not stream_url.startswith("http"):
             stream_url = os.path.abspath(stream_url)
 
-        # Naya stream play karo
         await calls_module.calls.play(chat_id, MediaStream(stream_url))
         
         current_songs[chat_id] = song
         playback_start_times[chat_id] = time.time()
         btns = get_player_buttons(chat_id)
         
-        sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
-        
+        # 🔥 THUMBNAIL FIX: Photo wapas add ki
+        thumb = song.get('thumbnail')
+        if thumb and not is_video:
+            try:
+                await m.delete()
+                sent_msg = await client.send_photo(chat_id, photo=thumb, caption=caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
+            except Exception as e:
+                logger.error(f"Thumbnail send failed: {e}")
+                sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
+        else:
+            sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
+
         if chat_id in live_timer_tasks: 
             live_timer_tasks[chat_id].cancel()
         live_timer_tasks[chat_id] = asyncio.create_task(update_live_timer(chat_id, sent_msg, song.get('duration', 0)))
