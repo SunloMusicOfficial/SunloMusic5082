@@ -20,17 +20,18 @@ else:
 
 chat_sessions = {}
 
+# 🔥 UPDATED PROMPT: Strictly short replies, no long paragraphs
 SYSTEM_PROMPT = (
-    "You are 'Sunlo', a highly intelligent and premium human-like assistant for the Telegram bot 'Sunlo Music'. "
+    "You are 'Sunlo', a cool, casual, and friendly human-like assistant for the Telegram bot 'Sunlo Music'. "
     "You are NOT an AI, a language model, or Gemini. You are a virtual member of the Sunlo Music Team. "
     "If anyone asks who you are, or if you are an AI/ChatGPT/Gemini, you must deny it and say: "
-    "'I am Sunlo, the assistant for Sunlo Music. I am here to help you with music and anything else you need.' "
+    "'I am Sunlo, the assistant for Sunlo Music.' "
     "IMPORTANT: You must be bilingual. Automatically detect the user's language. "
     "If the user speaks in English, reply in English. "
     "If the user speaks in Hindi or Hinglish (Hindi written in English alphabets), reply in friendly Hinglish. "
-    "Your tone should be friendly, slightly witty, and very helpful. You love music. "
-    "Keep your answers concise (under 100 words), natural, and use emojis occasionally. "
-    "Do NOT use any markdown formatting like bolding or italics, just plain text with emojis."
+    "CRITICAL: Keep your replies EXTREMELY short. Maximum 1-2 sentences. Talk like a normal friend on WhatsApp. "
+    "Do NOT write long paragraphs. Use emojis naturally. "
+    "Do NOT use any markdown formatting like bolding or italics, just plain text."
 )
 
 def get_assistant_buttons():
@@ -41,7 +42,7 @@ def get_assistant_buttons():
 
 async def get_ai_response(chat_id, text, image_path=None):
     if chat_id not in chat_sessions:
-        # 🔥 LATEST MODEL: gemini-3.8-flash
+        # 🔥 PRIMARY: Latest gemini-3.8-flash
         chat_sessions[chat_id] = {
             "chat": ai_client.chats.create(model="gemini-3.8-flash"),
             "last_query": "",
@@ -51,17 +52,31 @@ async def get_ai_response(chat_id, text, image_path=None):
     
     chat = chat_sessions[chat_id]["chat"]
     
-    if image_path and os.path.exists(image_path):
-        img = PIL.Image.open(image_path)
-        response = await asyncio.to_thread(chat.send_message, [text, img])
-        os.remove(image_path)
-    else:
-        response = await asyncio.to_thread(chat.send_message, text)
-        
-    chat_sessions[chat_id]["last_query"] = text
-    chat_sessions[chat_id]["last_img"] = image_path
-        
-    return response.text
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            if image_path and os.path.exists(image_path):
+                img = PIL.Image.open(image_path)
+                response = await asyncio.to_thread(chat.send_message, [text, img])
+                os.remove(image_path)
+                image_path = None
+            else:
+                response = await asyncio.to_thread(chat.send_message, text)
+                
+            chat_sessions[chat_id]["last_query"] = text
+            chat_sessions[chat_id]["last_img"] = image_path
+            return response.text
+            
+        except Exception as e:
+            if "503" in str(e) and attempt < max_retries - 1:
+                logger.warning(f"⚠️ 503 on 3.8-flash. Retrying with fallback model...")
+                # 🔥 FALLBACK: Switch to lighter model
+                chat_sessions[chat_id]["chat"] = ai_client.chats.create(model="gemini-3.5-flash-lite")
+                await asyncio.to_thread(chat_sessions[chat_id]["chat"].send_message, SYSTEM_PROMPT)
+                chat = chat_sessions[chat_id]["chat"]
+                await asyncio.sleep(1)
+            else:
+                raise e
 
 @app.on_message(filters.command(["ask", "sunlo"]) & filters.group)
 @register_user
@@ -161,7 +176,7 @@ async def ai_auto_reply(client, message):
         
     except Exception as e:
         logger.error(f"Auto Reply Error: {e}")
-        await m.edit_text("❌ Sunlo is busy right now.")
+        await m.edit_text("❌ Sunlo is busy right now. (Server load)")
 
 @app.on_message(filters.command("setchatbot") & filters.group)
 @register_user
