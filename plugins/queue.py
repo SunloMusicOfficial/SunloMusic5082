@@ -1,17 +1,12 @@
 import random
 from pytgcalls.types import MediaStream
 import core.calls as calls_module
+from utils.player_state import get_player_state
 from utils.logger import get_logger
 
 logger = get_logger("QueueManager")
 queues = {}
 current_songs = {}
-chat_states = {}
-
-def get_player_state(chat_id):
-    if chat_id not in chat_states:
-        chat_states[chat_id] = {"is_paused": False, "loop": False, "shuffle": False, "effect": None}
-    return chat_states[chat_id]
 
 async def add_to_queue(chat_id: int, song_data: dict):
     if chat_id not in queues:
@@ -34,7 +29,7 @@ async def play_next_in_queue(chat_id: int):
             if chat_id in current_songs: del current_songs[chat_id]
             logger.info(f"🚪 Left VC (Queue empty) in {chat_id}")
         except: pass
-        return
+        return None
 
     current_songs[chat_id] = next_song
     try:
@@ -51,5 +46,7 @@ async def play_next_in_queue(chat_id: int):
 
         await calls_module.calls.play(chat_id, MediaStream(stream_url, ffmpeg_parameters=ffmpeg_args))
         logger.info(f"🎵 Playing next: {next_song['title']} in {chat_id}")
+        return next_song # 🔥 Return song data for UI
     except Exception as e:
         logger.error(f"Queue play error: {e}")
+        return None

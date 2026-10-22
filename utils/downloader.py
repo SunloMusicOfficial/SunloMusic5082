@@ -20,12 +20,10 @@ class Downloader:
         thumbnail = None
         video_id = None
 
-        # 1. Smart YouTube Search
         if not query.startswith("http"):
             logger.info(f"🔍 Scraping YouTube for: {query}")
             try:
                 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-                # Search query me 'song' add kar rahe hain taaki podcast na aaye
                 search_url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}+song"
                 
                 async with aiohttp.ClientSession() as session:
@@ -36,7 +34,6 @@ class Downloader:
                         if match:
                             data = json.loads(match.group(1))
                             
-                            # Saare videoRenderers nikalo
                             def find_videos(obj, results):
                                 if isinstance(obj, dict):
                                     if "videoRenderer" in obj:
@@ -52,7 +49,6 @@ class Downloader:
                             best_renderer = None
                             
                             for r in renderers:
-                                # Duration check karo (15 minute se kam honi chahiye)
                                 if "lengthText" in r:
                                     dur_str = r["lengthText"]["simpleText"]
                                     parts = list(map(int, dur_str.split(":")))
@@ -60,11 +56,10 @@ class Downloader:
                                     if len(parts) == 2: dur = parts[0]*60 + parts[1]
                                     elif len(parts) == 3: dur = parts[0]*3600 + parts[1]*60 + parts[2]
                                     
-                                    if 60 < dur < 900: # 1 min se 15 min ke beech
+                                    if 60 < dur < 900: # 1 min to 15 mins
                                         best_renderer = r
                                         break
                             
-                            # Agar filter se koi na mile, toh pehla wala utha lo
                             if not best_renderer and renderers:
                                 best_renderer = renderers[0]
 
@@ -82,17 +77,19 @@ class Downloader:
                                 thumbnails = best_renderer.get("thumbnail", {}).get("thumbnails", [])
                                 if thumbnails:
                                     thumbnail = thumbnails[-1]["url"]
-                                
-                                logger.info(f"✅ Found: {title} | Dur: {duration}s")
             except Exception as e:
                 logger.warning(f"⚠️ Web Scraper failed: {e}")
 
-        if not video_id and not query.startswith("http"):
-            return None
-        elif query.startswith("http"):
+        if query.startswith("http"):
             video_id = query.split("v=")[-1].split("&")[0]
 
-        # 2. API Call
+        if not video_id:
+            return None
+
+        # 🔥 FIX: Agar thumbnail nahi mila, toh YouTube ki default URL use karo
+        if not thumbnail:
+            thumbnail = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+
         api_url = getattr(settings, "SUNLO_DOWNLOAD_API_URL", "")
         api_key = getattr(settings, "SUNLO_DOWNLOAD_API_KEY", "")
 
@@ -131,8 +128,6 @@ class Downloader:
                                     "thumbnail": thumbnail, 
                                     "uploader": "API File"
                                 }
-                        else:
-                            logger.error(f"❌ API error {resp.status}")
             except Exception as e:
                 logger.error(f"❌ API failed: {e}")
 

@@ -3,14 +3,13 @@ from ftmgram import filters, enums
 from ftmgram.types import CallbackQuery
 from core.bot import app
 import core.calls as calls_module
-from plugins.queue import play_next_in_queue, get_player_state, current_songs
+from plugins.queue import play_next_in_queue, current_songs
 from utils.decorators import register_user
 from utils.logger import get_logger
-from plugins.play import playback_start_times, live_timer_tasks, get_player_buttons, get_expanded_buttons
+from utils.player_state import playback_start_times, live_timer_tasks, get_player_buttons, get_expanded_buttons, get_player_state, send_now_playing_card
 
 logger = get_logger("Controls")
 
-# ── TEXT COMMANDS ──
 @app.on_message(filters.command("skip") & filters.group)
 @register_user
 async def skip_cmd(client, message):
@@ -20,8 +19,15 @@ async def skip_cmd(client, message):
     
     playback_start_times.pop(chat_id, None)
     if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
-    await message.reply_text("⏭ **Skipping...**")
-    await play_next_in_queue(chat_id)
+    
+    m = await message.reply_text("⏭ **Skipping...**")
+    next_song = await play_next_in_queue(chat_id)
+    
+    try: await m.delete()
+    except: pass
+    
+    if next_song:
+        await send_now_playing_card(client, chat_id, next_song)
 
 @app.on_message(filters.command(["stop", "end"]) & filters.group)
 @register_user
@@ -43,7 +49,7 @@ async def pause_cmd(client, message):
         await calls_module.calls.pause(chat_id)
         state["is_paused"] = True
         await message.reply_text("⏸ **Stream Paused.**")
-    except: await message.reply_text("❌ **No active stream to pause.**")
+    except: await message.reply_text("❌ **No active stream.**")
 
 @app.on_message(filters.command("resume") & filters.group)
 @register_user
@@ -54,9 +60,8 @@ async def resume_cmd(client, message):
         await calls_module.calls.resume(chat_id)
         state["is_paused"] = False
         await message.reply_text("▶️ **Stream Resumed.**")
-    except: await message.reply_text("❌ **No paused stream found.**")
+    except: await message.reply_text("❌ **No paused stream.**")
 
-# ── CALLBACK QUERIES (BUTTONS) ──
 @app.on_callback_query(filters.regex("^(pause_resume|shuffle|loop|skip|stop|seek_m10|seek_p10|more_controls|back_to_main|vol_up|vol_down)$"))
 async def controls_callback(client, query: CallbackQuery):
     data, chat_id = query.data, query.message.chat.id
@@ -87,11 +92,7 @@ async def controls_callback(client, query: CallbackQuery):
 
         elif data in ["vol_up", "vol_down"]:
             current_vol = state.get("volume", 100)
-            if data == "vol_up":
-                new_vol = min(200, current_vol + 20)
-            else:
-                new_vol = max(10, current_vol - 20)
-            
+            new_vol = min(200, current_vol + 20) if data == "vol_up" else max(10, current_vol - 20)
             state["volume"] = new_vol
             await calls_module.calls.change_volume_call(chat_id, new_vol)
             await query.answer(f"🔊 Volume: {new_vol}%")
@@ -102,7 +103,6 @@ async def controls_callback(client, query: CallbackQuery):
             current_time = int(time.time() - playback_start_times[chat_id])
             seek_sec = -10 if data == "seek_m10" else 10
             new_time = max(0, current_time + seek_sec)
-            
             await calls_module.calls.seek_stream(chat_id, new_time)
             playback_start_times[chat_id] = time.time() - new_time
             await query.answer(f"⏩ Seeked to {new_time}s")
@@ -112,7 +112,10 @@ async def controls_callback(client, query: CallbackQuery):
             playback_start_times.pop(chat_id, None)
             if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
             await query.message.delete()
-            await play_next_in_queue(chat_id)
+            
+            next_song = await play_next_in_queue(chat_id)
+            if next_song:
+                await send_now_playing_card(client, chat_id, next_song)
             
         elif data == "stop":
             await calls_module.calls.leave_call(chat_id)
