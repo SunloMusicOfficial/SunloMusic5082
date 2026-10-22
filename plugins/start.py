@@ -8,9 +8,14 @@ from utils.logger import get_logger
 
 logger = get_logger("StartPlugin")
 
-@app.on_message(filters.command("start") & filters.private)
+@app.on_message(filters.command("start"))
 @register_user
 async def start_handler(client, message):
+    # 🔥 Group mein command auto-delete karo
+    if message.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
+        try: await message.delete()
+        except: pass
+
     buttons = [
         [
             InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{settings.BOT_USERNAME.replace('@', '')}?startgroup=true"),
@@ -30,7 +35,7 @@ async def start_handler(client, message):
             parse_mode=enums.ParseMode.HTML
         )
     except Exception as e:
-        logger.warning(f"Start image failed, sending text instead: {e}")
+        logger.warning(f"Start image failed: {e}")
         await message.reply_text(
             text=constants.START_TEXT,
             reply_markup=InlineKeyboardMarkup(buttons),
@@ -40,6 +45,11 @@ async def start_handler(client, message):
 @app.on_message(filters.command("help"))
 @register_user
 async def help_handler(client, message):
+    # 🔥 Group mein command auto-delete karo
+    if message.chat.type in [enums.ChatType.GROUP, enums.ChatType.SUPERGROUP]:
+        try: await message.delete()
+        except: pass
+
     buttons = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔙 Back to Start", callback_data="back_start")]
     ])
@@ -73,9 +83,13 @@ async def callback_help(client, query):
                 InlineKeyboardButton("📚 Help", callback_data="help_menu")
             ]
         ]
-        await query.message.edit_caption(
-            caption=constants.START_TEXT,
-            reply_markup=InlineKeyboardMarkup(buttons),
-            parse_mode=enums.ParseMode.HTML
-        )
+        try:
+            await query.message.delete()
+            await query.message.reply_photo(
+                photo=constants.START_IMG,
+                caption=constants.START_TEXT,
+                reply_markup=InlineKeyboardMarkup(buttons),
+                parse_mode=enums.ParseMode.HTML
+            )
+        except: pass
     await query.answer()
