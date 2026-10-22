@@ -88,6 +88,11 @@ async def controls_callback(client, query: CallbackQuery):
                 await query.answer("⏸ Paused")
             await query.message.edit_reply_markup(reply_markup=refresh_main())
 
+        elif data == "autoplay":
+            state["autoplay"] = not state.get("autoplay", False)
+            await query.answer(f"🔄 Autoplay {'ON' if state['autoplay'] else 'OFF'}")
+            await query.message.edit_reply_markup(reply_markup=refresh_main())
+
         elif data == "more_controls":
             song = current_songs.get(chat_id, {})
             elapsed = int(time.time() - playback_start_times.get(chat_id, time.time())) if chat_id in playback_start_times else 0
@@ -115,12 +120,6 @@ async def controls_callback(client, query: CallbackQuery):
             await query.answer("⏹ Stopped")
             await delete_active_card(chat_id)
             
-        elif data == "autoplay":
-            state["autoplay"] = not state.get("autoplay", False)
-            await query.answer(f"🔄 Autoplay {'ON' if state['autoplay'] else 'OFF'}")
-            song = current_songs.get(chat_id, {})
-            await query.message.edit_reply_markup(reply_markup=get_expanded_buttons(chat_id, 0, song.get('duration', 0)))
-            
         elif data == "shuffle":
             state["shuffle"] = not state.get("shuffle", False)
             await query.answer(f"🔀 Shuffle {'ON' if state['shuffle'] else 'OFF'}")
@@ -138,7 +137,10 @@ async def controls_callback(client, query: CallbackQuery):
             current_time = int(time.time() - playback_start_times[chat_id])
             seek_sec = -10 if data == "seek_m10" else 10
             new_time = max(0, current_time + seek_sec)
-            await calls_module.calls.seek_stream(chat_id, new_time)
+            
+            # 🔥 FIX: PyTgCalls v3 uses .seek() instead of .seek_stream()
+            await calls_module.calls.seek(chat_id, new_time)
+            
             playback_start_times[chat_id] = time.time() - new_time
             await query.answer(f"⏩ Seeked to {new_time}s")
             song = current_songs.get(chat_id, {})
