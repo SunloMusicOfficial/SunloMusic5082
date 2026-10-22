@@ -18,28 +18,35 @@ def get_player_state(chat_id):
 
 def get_time_str(sec):
     m, s = divmod(int(sec), 60)
-    return f"{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
 
-def generate_bar(current, total, length=10):
-    if total == 0: return "─" * length
+# 💎 STYLE 1: DIAMOND BAR (Sabse Premium)
+def generate_bar(current, total, length=15):
+    if total == 0: return "⬡" * length
     played = int((current / total) * length)
-    if played >= length: played = length
-    return "▬" * played + "🔘" + "─" * (length - played)
+    if played >= length: played = length - 1
+    # Played = Solid Diamond, Remaining = Hollow Diamond, Current = Dot
+    return "⬢" * played + "◉" + "⬡" * (length - played - 1)
 
-# 🔥 NEW CLEAN UI (3 Rows as requested)
 def get_player_buttons(chat_id, video_id, current=0, total=0):
     state = get_player_state(chat_id)
     play_text = "▶️ ʀᴇꜱᴜᴍᴇ" if state.get("is_paused", False) else "⏸ ᴘᴀᴜꜱᴇ"
+    auto_btn = "✅ ᴀᴜᴛᴏᴘʟᴀʏ ᴏɴ" if state.get("autoplay", False) else "🔄 ᴀᴜᴛᴏᴘʟᴀʏ ᴏꜰꜰ"
+    
+    # Premium Timer Format
     time_btn_text = f"{get_time_str(current)} {generate_bar(current, total)} {get_time_str(total)}"
 
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(time_btn_text, callback_data="ignore")], # Row 1: Timer only
+        [InlineKeyboardButton(time_btn_text, callback_data="ignore")], # Row 1: Premium Timer
         [
             InlineKeyboardButton(play_text, callback_data="pause_resume"), # Row 2: Pause | Skip
             InlineKeyboardButton("⏭ ꜱᴋɪᴘ", callback_data="skip")
         ],
         [
-            InlineKeyboardButton("✨ ᴍᴏʀᴇ ᴄᴏɴᴛʀᴏʟꜱ", callback_data="more_controls") # Row 3: More Controls
+            InlineKeyboardButton(auto_btn, callback_data="autoplay") # Row 3: Autoplay
+        ],
+        [
+            InlineKeyboardButton("✨ ᴍᴏʀᴇ ᴄᴏɴᴛʀᴏʟꜱ", callback_data="more_controls") # Row 4: More Controls
         ]
     ])
 
@@ -47,10 +54,8 @@ def get_expanded_buttons(chat_id, current=0, total=0):
     state = get_player_state(chat_id)
     loop_btn = "🔁 ʟᴏᴏᴘ ᴏɴ" if state.get("loop", False) else "🔁 ʟᴏᴏᴘ ᴏꜰꜰ"
     shuffle_btn = "🔀 ꜱʜᴜꜰꜰʟᴇ ᴏɴ" if state.get("shuffle", False) else "🔀 ꜱʜᴜꜰꜰʟᴇ ᴏꜰꜰ"
-    auto_btn = "✅ ᴀᴜᴛᴏᴘʟᴀʏ ᴏɴ" if state.get("autoplay", False) else "🔄 ᴀᴜᴛᴏᴘʟᴀʏ ᴏꜰꜰ"
 
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(auto_btn, callback_data="autoplay")],
         [InlineKeyboardButton("⏪ -10ꜱ", callback_data="seek_m10"), InlineKeyboardButton("⏩ +10ꜱ", callback_data="seek_p10")],
         [InlineKeyboardButton(shuffle_btn, callback_data="shuffle"), InlineKeyboardButton(loop_btn, callback_data="loop")],
         [InlineKeyboardButton("⏹ ꜱᴛᴏᴘ ꜱᴛʀᴇᴀᴍ", callback_data="stop")],
@@ -60,7 +65,7 @@ def get_expanded_buttons(chat_id, current=0, total=0):
 async def update_live_timer(chat_id, message, duration_sec):
     from plugins.queue import current_songs
     while chat_id in playback_start_times:
-        await asyncio.sleep(10) 
+        await asyncio.sleep(5) # 5 seconds update for smooth bar
         if chat_id not in playback_start_times: break
         state = get_player_state(chat_id)
         if state.get("is_paused", False): continue
@@ -89,10 +94,10 @@ async def send_now_playing_card(client, chat_id, song, is_video=False, m=None):
     requester = song.get('requester', 'Channel')
     video_id = song.get('id', '')
     
-    # 🔥 CLICKABLE TITLE LINK TO DM
     bot_username = settings.BOT_USERNAME.replace('@', '')
     title_link = f'<a href="https://t.me/{bot_username}?start=song_{video_id}">{title_short}</a>'
     
+    # Clean Premium Caption
     caption = (
         f"<blockquote>🎧 <b>𝐍𝐨𝐰 𝐏𝐥𝐚𝐲𝐢𝐧𝐠</b>\n\n"
         f"▶️ <b>𝐓𝐢𝐭𝐥𝐞 :</b> {title_link}\n"
