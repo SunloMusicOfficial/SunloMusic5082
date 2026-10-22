@@ -2,6 +2,7 @@ import asyncio, os
 from ftmgram import filters, enums
 from pytgcalls.types import MediaStream
 from core.bot import app
+from core.userbot import userbot
 import core.calls as calls_module
 from utils.decorators import register_user
 from utils.downloader import downloader
@@ -21,6 +22,18 @@ async def play_handler(client, message):
     is_video = cmd == "vplay"
     is_channel = cmd == "cplay"
     
+    # 🔥 FIX: Check if Assistant is in group before playing
+    if not is_channel:
+        try:
+            userbot_me = await userbot.get_me()
+            await client.get_chat_member(message.chat.id, userbot_me.id)
+        except Exception:
+            return await message.reply_text(
+                f"🚨 **Assistant is not in this group!**\n\n"
+                f"Please add `@{userbot_me.username}` to this group as an Admin, then try again.",
+                parse_mode=enums.ParseMode.HTML
+            )
+
     if not is_channel and is_rate_limited(message.from_user.id):
         return await message.reply_text("⚠️ <b>Sabar karein!</b> 3 second ka cooldown hai.", parse_mode=enums.ParseMode.HTML)
     
@@ -36,7 +49,7 @@ async def play_handler(client, message):
     song = await downloader.search_and_extract(query)
     
     if not song or not song.get('stream_url'):
-        return await m.edit_text("❌ <b>Failed.</b>\n<i>The audio API returned an invalid or corrupt file.</i>", parse_mode=enums.ParseMode.HTML)
+        return await m.edit_text("❌ <b>Failed.</b>\n<i>Could not extract stream URL.</i>", parse_mode=enums.ParseMode.HTML)
         
     await play_song_by_id(client, message, m, song, is_video)
 
@@ -80,17 +93,17 @@ async def play_song_by_id(client, message, m, song, is_video=False):
     except: pass
     
     try:
+        # Force leave and wait 3 seconds to clear channel cache
         if chat_id in active_calls:
             try: await asyncio.wait_for(calls_module.calls.leave_call(chat_id), timeout=5)
             except: pass
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
 
         stream_url = song['stream_url']
         if not stream_url.startswith("http"):
             stream_url = os.path.abspath(stream_url)
 
-        # 🔥 Strict 20s Timeout
-        await asyncio.wait_for(calls_module.calls.play(chat_id, MediaStream(stream_url)), timeout=20)
+        await asyncio.wait_for(calls_module.calls.play(chat_id, MediaStream(stream_url)), timeout=40)
         
         current_songs[chat_id] = song
         await send_now_playing_card(client, chat_id, song, is_video, m)
@@ -100,7 +113,7 @@ async def play_song_by_id(client, message, m, song, is_video=False):
         current_songs.pop(chat_id, None)
         try: await calls_module.calls.leave_call(chat_id)
         except: pass
-        try: await m.edit_text("❌ <b>Playback Timed Out.</b>\n<i>Voice engine could not process the file. Try again.</i>", parse_mode=enums.ParseMode.HTML)
+        try: await m.edit_text("❌ <b>Failed to play!</b>\n<i>Voice Engine timed out. Please try again.</i>", parse_mode=enums.ParseMode.HTML)
         except: pass
     except Exception as e:
         logger.error(f"Play error: {e}")
