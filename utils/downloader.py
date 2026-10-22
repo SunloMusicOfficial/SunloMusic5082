@@ -17,23 +17,22 @@ class Downloader:
 
         if not query.startswith("http"):
             try:
-                # 🔥 FIX: ytsearch1 use karo, but check if it's a song
-                ydl_opts = {"quiet": True, "extract_flat": True, "default_search": "ytsearch1"}
+                # 🔥 BADE BOTS WALA TARIKA: ytsearch (query) + "song" add karo
+                search_query = f"ytsearch:{query} song"
+                ydl_opts = {"quiet": True, "extract_flat": True, "default_search": "ytsearch"}
+                
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(f"ytsearch1:{query} song", download=False)
+                    info = ydl.extract_info(search_query, download=False)
                     if "entries" in info and info["entries"]:
-                        entry = info["entries"][0]
-                        dur = entry.get("duration", 0)
-                        # Agar 15 min se lamba hai, toh reject karo (podcast)
-                        if dur > 900:
-                            logger.warning("⚠️ Found long video (podcast), rejecting.")
-                            return None
-                            
-                        if entry.get("id"):
-                            video_id = entry["id"]
-                            video_url = f"https://www.youtube.com/watch?v={video_id}"
-                            title = entry.get("title", query)
-                            duration = dur
+                        # Sabse pehla result uthao jo gaana ho (15 min se kam)
+                        for entry in info["entries"]:
+                            dur = entry.get("duration", 0)
+                            if 30 <= dur <= 900: # 30 sec se 15 min tak
+                                video_id = entry["id"]
+                                video_url = f"https://www.youtube.com/watch?v={video_id}"
+                                title = entry.get("title", query)
+                                duration = dur
+                                break
             except Exception as e:
                 logger.warning(f"⚠️ Search failed: {e}")
 
@@ -64,7 +63,8 @@ class Downloader:
                                         "title": data.get("title", title), 
                                         "duration": data.get("duration", duration), 
                                         "stream_url": stream_url, 
-                                        "thumbnail": data.get("thumbnail", f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None), 
+                                        # API ka thumbnail use karo, agar nahi toh YouTube ka
+                                        "thumbnail": data.get("thumbnail") or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg", 
                                         "uploader": "API"
                                     }
                             else:
@@ -76,7 +76,7 @@ class Downloader:
                                         f.write(chunk)
                                 
                                 if os.path.exists(file_path) and os.path.getsize(file_path) > 50000:
-                                    return {"id": video_id or query, "title": title, "duration": duration, "stream_url": file_path, "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None, "uploader": "API File"}
+                                    return {"id": video_id or query, "title": title, "duration": duration, "stream_url": file_path, "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg", "uploader": "API File"}
                                 else:
                                     if os.path.exists(file_path): os.remove(file_path)
             except Exception as e:
