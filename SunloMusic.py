@@ -23,7 +23,6 @@ from utils.keep_alive import self_ping
 from utils.player_state import send_now_playing_card, delete_active_card
 from plugins.queue import current_songs
 
-# 🔥 FIX: Safe import for StreamEnded
 try:
     from pytgcalls.types import Update, StreamEnded
 except ImportError:
@@ -46,6 +45,13 @@ def load_plugins():
             logger.error(f"❌ Failed to load {file.stem}: {e}")
     return loaded
 
+async def send_log(text):
+    if settings.LOG_GROUP_ID != 0:
+        try:
+            await app.send_message(settings.LOG_GROUP_ID, text, parse_mode=enums.ParseMode.HTML)
+        except Exception as e:
+            logger.error(f"Log group error: {e}")
+
 async def startup():
     print("""
     ╔══════════════════════════════════════════╗
@@ -67,6 +73,9 @@ async def startup():
         print(f"❌ Failed to start: {e}")
         sys.exit(1)
     
+    me = await app.get_me()
+    user_me = await userbot.get_me()
+    
     print("🗄️ Connecting to Database...")
     try:
         await db.connect()
@@ -79,7 +88,6 @@ async def startup():
     calls_module.calls = PyTgCalls(userbot)
     await calls_module.calls.start()
     
-    # 🔥 STREAM END HANDLER
     @calls_module.calls.on_update()
     async def stream_handler(client, update: Update):
         try:
@@ -106,6 +114,10 @@ async def startup():
     
     asyncio.create_task(health_monitor(app, userbot))
     asyncio.create_task(self_ping(app))
+    
+    # 🔥 RESTORED START MESSAGES
+    await send_log(f"🤖 <b>𝐀𝐒𝐒𝐈𝐒𝐓𝐀𝐍𝐓 𝐔𝐒𝐄𝐑𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n👤 <b>Name:</b> {user_me.first_name}\n🆔 <b>ID:</b> <code>{user_me.id}</code>")
+    await send_log(f"🚀 <b>𝐒𝐔𝐍𝐋𝐎 𝐌𝐔𝐒𝐈𝐂 𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n🤖 <b>Bot:</b> @{me.username}\n⚙️ <b>Plugins:</b> <code>{len(plugins)} Loaded</code>")
     
     print("🚀 Sunlo Music is ready to rock!")
 

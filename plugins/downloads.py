@@ -6,18 +6,17 @@ from config.settings import settings
 from utils.decorators import register_user
 from utils.downloader import downloader
 
-@app.on_message(filters.command("song") & filters.private)
+@app.on_message(filters.command("song")) # 🔥 FIX: Removed filters.private
 @register_user
 async def song_dl(client, message):
     if len(message.command) < 2: return await message.reply_text("🎵 **ᴜꜱᴀɢᴇ:** `/song <name>`")
     
-    m = await message.reply_text("🔍 **Searching & Downloading...**")
-    
-    # Get Video ID via yt-dlp search
+    m = await message.reply_text("🔍 **Searching...**")
     video_url = " ".join(message.command[1:])
+    
     song_info = await downloader.search_and_extract(video_url)
     if not song_info:
-        return await m.edit_text("❌ **Song not found!**")
+        return await m.edit_text("❌ **Song not found on YouTube!**")
         
     video_id = song_info['id']
     title = song_info['title']
@@ -25,6 +24,10 @@ async def song_dl(client, message):
     api_url = getattr(settings, "SUNLO_DOWNLOAD_API_URL", "")
     api_key = getattr(settings, "SUNLO_DOWNLOAD_API_KEY", "")
     
+    if not api_url or not api_key:
+        return await m.edit_text("❌ **API Key missing in Environment Variables!**")
+
+    await m.edit_text("📥 **Downloading Audio...**")
     try:
         os.makedirs("cache", exist_ok=True)
         file_path = f"cache/song_{video_id}.mp3"
@@ -33,19 +36,9 @@ async def song_dl(client, message):
             payload = {"url": f"https://youtube.com/watch?v={video_id}", "api_key": api_key, "type": "audio"}
             async with session.post(f"{api_url.rstrip('/')}/download", json=payload, timeout=120) as resp:
                 if resp.status == 200:
-                    content_type = resp.headers.get("Content-Type", "")
-                    if "application/json" in content_type:
-                        data = await resp.json()
-                        stream_url = data.get("url") or data.get("link")
-                        if stream_url:
-                            async with session.get(stream_url) as file_resp:
-                                with open(file_path, "wb") as f:
-                                    async for chunk in file_resp.content.iter_chunked(65536):
-                                        f.write(chunk)
-                    else:
-                        with open(file_path, "wb") as f:
-                            async for chunk in resp.content.iter_chunked(65536):
-                                f.write(chunk)
+                    with open(file_path, "wb") as f:
+                        async for chunk in resp.content.iter_chunked(65536):
+                            f.write(chunk)
                                 
                     if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
                         await message.reply_audio(audio=file_path, title=title, performer="Sunlo Music")
@@ -56,16 +49,16 @@ async def song_dl(client, message):
                 else:
                     await m.edit_text(f"❌ API Error: {resp.status}")
     except Exception as e:
-        await m.edit_text(f"❌ Error: {e}")
+        await m.edit_text(f"❌ Error: `{e}`")
 
-@app.on_message(filters.command("video") & filters.private)
+@app.on_message(filters.command("video")) # 🔥 FIX: Removed filters.private
 @register_user
 async def video_dl(client, message):
     if len(message.command) < 2: return await message.reply_text("🎬 **ᴜꜱᴀɢᴇ:** `/video <name>`")
-    # Same logic as above, just change "type": "audio" to "type": "video" and reply_video
-    m = await message.reply_text("🔍 **Searching & Downloading Video...**")
     
+    m = await message.reply_text("🔍 **Searching Video...**")
     video_url = " ".join(message.command[1:])
+    
     song_info = await downloader.search_and_extract(video_url)
     if not song_info:
         return await m.edit_text("❌ **Video not found!**")
@@ -76,6 +69,7 @@ async def video_dl(client, message):
     api_url = getattr(settings, "SUNLO_DOWNLOAD_API_URL", "")
     api_key = getattr(settings, "SUNLO_DOWNLOAD_API_KEY", "")
     
+    await m.edit_text("📥 **Downloading Video...**")
     try:
         os.makedirs("cache", exist_ok=True)
         file_path = f"cache/video_{video_id}.mp4"
@@ -97,4 +91,4 @@ async def video_dl(client, message):
                 else:
                     await m.edit_text(f"❌ API Error: {resp.status}")
     except Exception as e:
-        await m.edit_text(f"❌ Error: {e}")
+        await m.edit_text(f"❌ Error: `{e}`")
