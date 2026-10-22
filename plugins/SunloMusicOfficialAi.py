@@ -1,7 +1,8 @@
 import asyncio
 import os
-import google.generativeai as genai
 import PIL.Image
+from google import genai
+from google.genai import types
 from ftmgram import filters, enums
 from ftmgram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from core.bot import app
@@ -12,13 +13,12 @@ from database.chats import set_chat_setting, get_chat_setting
 
 logger = get_logger("SunloMusicOfficialAi")
 
-# 🔥 SUNLO AI ENGINE (Powered internally)
+# 🔥 NEW SUNLO AI ENGINE (google-genai)
 if settings.SUNLO_AI_KEY:
-    genai.configure(api_key=settings.SUNLO_AI_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    ai_client = genai.Client(api_key=settings.SUNLO_AI_KEY)
 else:
     logger.warning("⚠️ SUNLO_AI_KEY is missing. Assistant won't work.")
-    model = None
+    ai_client = None
 
 chat_sessions = {}
 
@@ -44,21 +44,23 @@ def get_assistant_buttons():
 
 async def get_ai_response(chat_id, text, image_path=None):
     if chat_id not in chat_sessions:
+        # Create new chat session with context
         chat_sessions[chat_id] = {
-            "session": model.start_chat(history=[]),
+            "chat": ai_client.chats.create(model="gemini-1.5-flash"),
             "last_query": "",
             "last_img": None
         }
-        chat_sessions[chat_id]["session"].send_message(SYSTEM_PROMPT)
+        # Send system prompt silently
+        await asyncio.to_thread(chat_sessions[chat_id]["chat"].send_message, SYSTEM_PROMPT)
     
-    session = chat_sessions[chat_id]["session"]
+    chat = chat_sessions[chat_id]["chat"]
     
     if image_path and os.path.exists(image_path):
         img = PIL.Image.open(image_path)
-        response = await asyncio.to_thread(session.send_message, [text, img])
+        response = await asyncio.to_thread(chat.send_message, [text, img])
         os.remove(image_path)
     else:
-        response = await asyncio.to_thread(session.send_message, text)
+        response = await asyncio.to_thread(chat.send_message, text)
         
     chat_sessions[chat_id]["last_query"] = text
     chat_sessions[chat_id]["last_img"] = image_path
@@ -68,7 +70,7 @@ async def get_ai_response(chat_id, text, image_path=None):
 @app.on_message(filters.command(["ask", "sunlo"]) & filters.group)
 @register_user
 async def ask_ai(client, message):
-    if not model:
+    if not ai_client:
         return await message.reply_text("⚠️ Sunlo is currently offline for maintenance.")
 
     if len(message.command) < 2 and not (message.reply_to_message and message.reply_to_message.photo):
@@ -135,7 +137,7 @@ async def ai_callbacks(client, query):
 # ── AUTO-REPLY WATCHER ──
 @app.on_message(filters.text & filters.group & ~filters.bot, group=4)
 async def ai_auto_reply(client, message):
-    if not model: return
+    if not ai_client: return
     
     chat_id = message.chat.id
     is_enabled = await get_chat_setting(chat_id, "chatbot_enabled", False)

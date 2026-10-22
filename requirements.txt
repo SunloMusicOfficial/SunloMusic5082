@@ -30,8 +30,8 @@ pyshorteners
 SpeechRecognition
 audd
 
-# ── AI Engine (SunloMusicOfficialAi) ──
-google-generativeai
+# ── AI Engine (New Google SDK) ──
+google-genai
 
 # ── Web Dashboard ──
 flask
