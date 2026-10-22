@@ -76,7 +76,9 @@ async def play_handler(client, message):
     
     song = await downloader.search_and_extract(query)
     if not song:
-        return await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n<i>Could not extract stream URL.</i>", parse_mode=enums.ParseMode.HTML)
+        try: await m.edit_text("❌ <b>ꜰᴀɪʟᴇᴅ.</b>\n<i>Could not extract stream URL.</i>", parse_mode=enums.ParseMode.HTML)
+        except: pass
+        return
 
     await play_song_by_id(client, message, m, song, is_video)
 
@@ -98,10 +100,15 @@ async def play_song_by_id(client, message, m, song, is_video=False):
     active_calls = await calls_module.calls.calls
     if chat_id in active_calls and chat_id in current_songs:
         await add_to_queue(chat_id, song)
-        return await m.edit_text(f"📥 <b>𝐀𝐝𝐝𝐞𝐝 𝐭𝐨 𝐐𝐮𝐞𝐮𝐞 :</b>\n🎵 {title_short}", parse_mode=enums.ParseMode.HTML)
+        try: await m.edit_text(f"📥 <b>𝐀𝐝𝐝𝐞𝐝 𝐭𝐨 𝐐𝐮𝐞𝐮𝐞 :</b>\n🎵 {title_short}", parse_mode=enums.ParseMode.HTML)
+        except: await client.send_message(chat_id, f"📥 <b>𝐀𝐝𝐝𝐞𝐝 𝐭𝐨 𝐐𝐮𝐞𝐮𝐞 :</b>\n🎵 {title_short}", parse_mode=enums.ParseMode.HTML)
+        return
 
-    await m.edit_text("▸ <b>𝐂𝐨𝐧𝐧𝐞𝐜𝐭𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
+    try: await m.edit_text("▸ <b>𝐂𝐨𝐧𝐧𝐞𝐜𝐭𝐢𝐧𝐠...</b>", parse_mode=enums.ParseMode.HTML)
+    except: pass
+    
     try:
+        # Clear stuck state if any
         try:
             await calls_module.calls.leave_call(chat_id)
             await asyncio.sleep(1)
@@ -117,22 +124,34 @@ async def play_song_by_id(client, message, m, song, is_video=False):
         playback_start_times[chat_id] = time.time()
         btns = get_player_buttons(chat_id)
         
-        # 🔥 THUMBNAIL FIX: Photo wapas add ki
         thumb = song.get('thumbnail')
+        sent_msg = None
+        
+        # 🔥 FIX: Try to send photo first. If fails, send text.
         if thumb and not is_video:
             try:
-                await m.delete()
                 sent_msg = await client.send_photo(chat_id, photo=thumb, caption=caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
+                try: await m.delete()
+                except: pass
             except Exception as e:
-                logger.error(f"Thumbnail send failed: {e}")
-                sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
+                logger.error(f"Thumbnail send failed: {e}. Sending text instead.")
+                try: sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
+                except:
+                    sent_msg = await client.send_message(chat_id, caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
         else:
-            sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
+            try: sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
+            except:
+                sent_msg = await client.send_message(chat_id, caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
 
         if chat_id in live_timer_tasks: 
             live_timer_tasks[chat_id].cancel()
-        live_timer_tasks[chat_id] = asyncio.create_task(update_live_timer(chat_id, sent_msg, song.get('duration', 0)))
+        if sent_msg:
+            live_timer_tasks[chat_id] = asyncio.create_task(update_live_timer(chat_id, sent_msg, song.get('duration', 0)))
         
     except Exception as e:
         logger.error(f"Play error: {e}")
-        await m.edit_text(f"❌ <b>ꜰᴀɪʟᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴠᴄ.</b>\n<code>{e}</code>", parse_mode=enums.ParseMode.HTML)
+        # 🔥 FIX: If play fails, clear state so next song isn't queued
+        current_songs.pop(chat_id, None)
+        try: await m.edit_text(f"❌ <b>ꜰᴀɪʟᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴠᴄ.</b>\n<code>{e}</code>", parse_mode=enums.ParseMode.HTML)
+        except:
+            await client.send_message(chat_id, f"❌ <b>ꜰᴀɪʟᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴠᴄ.</b>\n<code>{e}</code>", parse_mode=enums.ParseMode.HTML)
