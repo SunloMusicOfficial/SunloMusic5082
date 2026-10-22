@@ -20,6 +20,11 @@ async def all_commands(client, message):
         "▸ /crossfade /loopqueue /shuffle\n"
         "▸ /remove /clearqueue\n\n"
 
+        "✨ <b>𝐀𝐈 𝐀𝐒𝐒𝐈𝐒𝐓𝐀𝐍𝐓</b>\n"
+        "▸ /ask &lt;question&gt; - Chat with Sunlo\n"
+        "▸ /sunlo &lt;question&gt; - Alias for /ask\n"
+        "▸ /setchatbot &lt;on/off&gt; - Auto-reply in group\n\n"
+
         "📻 <b>𝐒𝐓𝐑𝐄𝐀𝐌𝐈𝐍𝐆 & 𝐑𝐀𝐃𝐈𝐎</b>\n"
         "▸ /radio &lt;lofi/bollywood&gt;\n"
         "▸ /sleep &lt;min&gt; - Sleep timer\n"
@@ -36,13 +41,13 @@ async def all_commands(client, message):
         "▸ /spotify /soundcloud /jiosaavn\n"
         "▸ /ig /insta /fb /twitter /pinterest\n\n"
 
-        "🖼 <b>𝐈𝐌𝐀𝐆𝐄 & 𝐀𝐈 𝐓𝐎𝐎𝐋𝐒</b>\n"
+        "🖼 <b>𝐈𝐌𝐀𝐆𝐄 & 𝐓𝐎𝐎𝐋𝐒</b>\n"
         "▸ /makestart - Generate start image\n"
         "▸ /geturl - Get Image URL/FileID\n"
         "▸ /shazam - Identify song (reply to voice)\n"
         "▸ /tts &lt;text&gt; - Text to speech\n\n"
 
-        "🛠 <b>𝐓𝐎𝐎𝐋𝐒 & 𝐔𝐓𝐈𝐋𝐈𝐓𝐈𝐄𝐒</b>\n"
+        "🛠 <b>𝐔𝐓𝐈𝐋𝐈𝐓𝐈𝐄𝐒</b>\n"
         "▸ /ping /id /uptime /stats /sysinfo\n"
         "▸ /calc /translate /shorten /base64\n"
         "▸ /whois /wiki /google /weather\n"
