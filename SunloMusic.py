@@ -4,7 +4,10 @@ import sys
 from pathlib import Path
 from ftmgram import idle, enums
 from pytgcalls.types import Update
-from pytgcalls.types.stream import StreamAudioEnded, StreamVideoEnded
+
+# 🔥 FIX: StreamEnded is the correct class in PyTgCalls v3
+from pytgcalls.types import StreamEnded
+
 from config.settings import settings
 from core.bot import app
 from core.userbot import userbot
@@ -55,7 +58,7 @@ async def startup():
     async def stream_handler(client, update: Update):
         try:
             # 🔥 FIX: PyTgCalls v3 StreamEnded check
-            if isinstance(update, StreamAudioEnded) or isinstance(update, StreamVideoEnded):
+            if isinstance(update, StreamEnded):
                 chat_id = update.chat_id
                 print(f"🎵 Song ended in {chat_id}.")
                 
