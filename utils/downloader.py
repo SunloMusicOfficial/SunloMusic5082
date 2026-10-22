@@ -2,6 +2,7 @@ import asyncio
 import yt_dlp
 import os
 import time
+import subprocess
 from utils.logger import get_logger
 from config.settings import settings
 
@@ -9,11 +10,11 @@ logger = get_logger("Downloader")
 
 class Downloader:
     async def search_and_extract(self, query: str, platform="yt"):
-        # (Yeh pichla wala hi code hai, isme koi change nahi hai)
         video_url = query
         title = query
         duration = 0
         video_id = None
+        
         if not query.startswith("http"):
             try:
                 ydl_opts = {"quiet": True, "extract_flat": True, "default_search": "ytsearch1"}
@@ -28,6 +29,7 @@ class Downloader:
                             duration = entry.get("duration", 0)
             except Exception as e:
                 logger.warning(f"⚠️ Search failed: {e}")
+                
         if query.startswith("http"):
             video_id = query.split("v=")[-1].split("&")[0]
 
@@ -39,9 +41,10 @@ class Downloader:
                 import aiohttp
                 os.makedirs("cache", exist_ok=True)
                 timestamp = int(time.time())
+                
                 async with aiohttp.ClientSession() as session:
                     payload = {"url": video_url, "q": query, "api_key": api_key, "type": "audio"}
-                    async with session.post(f"{api_url.rstrip('/')}/download", json=payload, timeout=40) as resp:
+                    async with session.post(f"{api_url.rstrip('/')}/download", json=payload, timeout=60) as resp:
                         if resp.status == 200:
                             content_type = resp.headers.get("Content-Type", "")
                             if "application/json" in content_type:
@@ -52,38 +55,30 @@ class Downloader:
                             else:
                                 ext = ".m4a" if "mp4" in content_type else ".mp3"
                                 file_path = f"cache/api_{timestamp}{ext}"
+                                
                                 with open(file_path, "wb") as f:
                                     async for chunk in resp.content.iter_chunked(65536):
                                         f.write(chunk)
-                                return {"id": video_id or query, "title": title, "duration": duration, "stream_url": file_path, "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None, "uploader": "API File"}
+                                
+                                # 🔥 FFMPEG VALIDATION: Check if file is actually playable
+                                if os.path.exists(file_path) and os.path.getsize(file_path) > 50000:
+                                    try:
+                                        # FFprobe command to test file
+                                        probe_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file_path]
+                                        result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=5)
+                                        if result.returncode == 0 and float(result.stdout.strip() or 0) > 1:
+                                            logger.info(f"✅ File validated via FFmpeg: {file_path}")
+                                            return {"id": video_id or query, "title": title, "duration": duration, "stream_url": file_path, "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None, "uploader": "API File"}
+                                    except Exception as fe:
+                                        logger.error(f"FFmpeg validation failed: {fe}")
+                                
+                                logger.error(f"❌ File is corrupt or too small: {file_path}")
+                                if os.path.exists(file_path): os.remove(file_path)
+                                return None
             except Exception as e:
                 logger.error(f"❌ API failed: {e}")
 
         return None
-
-    # 🔥 FIX: /song aur /video ke liye download_media
-    async def download_media(self, video_id: str, is_video=False) -> str:
-        def _download():
-            try:
-                os.makedirs("cache", exist_ok=True)
-                ext = "mp4" if is_video else "mp3"
-                file_path = f"cache/dl_{video_id}.{ext}"
-                
-                if os.path.exists(file_path):
-                    return file_path
-
-                ydl_opts = {
-                    "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" if is_video else "bestaudio/best",
-                    "outtmpl": file_path,
-                    "quiet": True,
-                }
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
-                return file_path
-            except Exception as e:
-                logger.error(f"❌ Download failed: {e}")
-                return None
-        return await asyncio.to_thread(_download)
 
     async def get_stream(self, video_id: str):
         return await self.search_and_extract(video_id)
