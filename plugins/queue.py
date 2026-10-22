@@ -25,15 +25,17 @@ async def play_next_in_queue(chat_id: int):
     elif chat_id in queues and queues[chat_id]:
         next_song = queues[chat_id].pop(0)
     else:
+        # 🔥 AUTO LEAVE VC FIX
         try:
-            await calls_module.calls.leave_call(chat_id)
-            await delete_active_card(chat_id) # 🔥 Delete card if queue empty
-            if chat_id in current_songs: del current_songs[chat_id]
+            await asyncio.wait_for(calls_module.calls.leave_call(chat_id), timeout=10)
+            await delete_active_card(chat_id)
+            if chat_id in current_songs: 
+                del current_songs[chat_id]
             logger.info(f"🚪 Left VC (Queue empty) in {chat_id}")
-        except: pass
+        except Exception as e:
+            logger.error(f"Leave VC error: {e}")
         return None
 
-    # 🔥 Delete the "Added to Queue" message before playing
     if "queue_msg" in next_song:
         try: await next_song["queue_msg"].delete()
         except: pass
@@ -41,29 +43,12 @@ async def play_next_in_queue(chat_id: int):
     current_songs[chat_id] = next_song
     try:
         stream_url = next_song.get("stream_url") or next_song.get("file_path")
-        effect = state.get("effect")
-        
-        ffmpeg_args = None
-        if effect == "bass": ffmpeg_args = "-af bass=g=15"
-        elif effect == "8d": ffmpeg_args = "-af apulsator=hz=0.08"
-        elif effect == "nightcore": ffmpeg_args = "-af atempo=1.2,asetrate=48000*1.2"
-        elif effect == "slowed": ffmpeg_args = "-af atempo=0.85,asetrate=44100*0.85"
-        elif effect == "vaporwave": ffmpeg_args = "-af atempo=0.8,asetrate=44100*0.8"
-        elif effect == "karaoke": ffmpeg_args = "-af pan=stereo|c0=c0|c1=-1*c1"
-
         await asyncio.wait_for(
-            calls_module.calls.play(chat_id, MediaStream(stream_url, ffmpeg_parameters=ffmpeg_args)),
+            calls_module.calls.play(chat_id, MediaStream(stream_url)),
             timeout=15
         )
-        
         logger.info(f"🎵 Playing next: {next_song['title']} in {chat_id}")
         return next_song
-    except asyncio.TimeoutError:
-        logger.error(f"❌ Queue Play Timeout in {chat_id}")
-        current_songs.pop(chat_id, None)
-        try: await calls_module.calls.leave_call(chat_id)
-        except: pass
-        return None
     except Exception as e:
         logger.error(f"Queue play error: {e}")
         return None

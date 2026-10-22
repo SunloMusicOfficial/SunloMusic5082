@@ -23,10 +23,10 @@ from utils.log_cleaner import clear_old_logs
 from utils.keep_alive import self_ping
 from plugins.queue import current_songs
 from utils.player_state import send_now_playing_card, delete_active_card
+from pytgcalls.types import Update, StreamEnded
 
 logger = get_logger("SunloMusic")
 PLUGINS_DIR = Path("plugins")
-START_TIME = time.time()
 
 def load_plugins():
     loaded = []
@@ -44,18 +44,6 @@ async def send_log(text):
     if settings.LOG_GROUP_ID != 0:
         try:
             await app.send_message(settings.LOG_GROUP_ID, text, parse_mode=enums.ParseMode.HTML)
-        except Exception as e:
-            logger.error(f"Log group error: {e}")
-
-async def auto_leave_vc():
-    while True:
-        await asyncio.sleep(60)
-        try:
-            active_calls = await calls_module.calls.calls
-            for chat_id in list(active_calls.keys()):
-                if chat_id not in current_songs:
-                    await asyncio.wait_for(calls_module.calls.leave_call(chat_id), timeout=10)
-                    logger.info(f"🚪 Auto-Left VC in {chat_id} (Inactive)")
         except: pass
 
 async def startup():
@@ -76,81 +64,46 @@ async def startup():
     except FloodWait as e:
         logger.critical(f"🛑 FloodWait: Please wait {e.value} seconds.")
         sys.exit(1)
-    except Exception as e:
-        logger.critical(f"❌ Failed to start: {e}")
-        sys.exit(1)
     
-    me = await app.get_me()
-    user_me = await userbot.get_me()
-    
-    logger.info("🗄️ Connecting to Database...")
-    try:
-        await db.connect()
-    except Exception as e:
-        await send_log(f"❌ <b>Database Connection Failed!</b>\n<code>{e}</code>")
-        logger.critical(f"Fatal: Database failed.")
-        sys.exit(1)
+    await db.connect()
     
     from pytgcalls import PyTgCalls
-    from pytgcalls.types import Update, StreamEnded
     calls_module.calls = PyTgCalls(userbot)
     await calls_module.calls.start()
     
-    # 🔥 STREAM ENDED HANDLER (Auto-Play Next Song)
+    # 🔥 STREAM ENDED HANDLER
     @calls_module.calls.on_update()
     async def stream_handler(client, update: Update):
         try:
-            if update.status == StreamEnded or update.status == "stream_ended":
+            if update.status == StreamEnded or str(update.status) == "stream_ended":
                 chat_id = update.chat_id
-                logger.info(f"🎵 Song ended in {chat_id}. Checking queue...")
+                logger.info(f"🎵 Song ended in {chat_id}.")
                 
                 from plugins.queue import play_next_in_queue
                 try:
                     next_song = await asyncio.wait_for(play_next_in_queue(chat_id), timeout=20)
                     if next_song:
                         await send_now_playing_card(app, chat_id, next_song)
-                    else:
-                        await delete_active_card(chat_id)
-                except asyncio.TimeoutError:
-                    logger.error(f"❌ Queue timeout in {chat_id}")
-                    current_songs.pop(chat_id, None)
-                    await asyncio.wait_for(calls_module.calls.leave_call(chat_id), timeout=5)
-                    await delete_active_card(chat_id)
+                except Exception as e:
+                    logger.error(f"Stream end error: {e}")
         except Exception as e:
-            logger.error(f"Stream handler error: {e}")
+            logger.error(f"Update handler error: {e}")
             
-    logger.info("⏳ Loading Plugins...")
     plugins = load_plugins()
     
     asyncio.create_task(health_monitor(app, userbot))
-    asyncio.create_task(auto_leave_vc())
     asyncio.create_task(self_ping(app))
-    
-    await send_log(
-        f"🤖 <b>𝐀𝐒𝐒𝐈𝐒𝐓𝐀𝐍𝐓 𝐔𝐒𝐄𝐑𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n"
-        f"👤 <b>Name:</b> {user_me.first_name}\n"
-        f"🆔 <b>ID:</b> <code>{user_me.id}</code>"
-    )
-    
-    await send_log(
-        f"🚀 <b>𝐒𝐔𝐍𝐋𝐎 𝐌𝐔𝐒𝐈𝐂 𝐁𝐎𝐓 𝐒𝐓𝐀𝐑𝐓𝐄𝐃</b>\n"
-        f"🤖 <b>Bot:</b> @{me.username}\n"
-        f"⚙️ <b>Plugins:</b> <code>{len(plugins)} Loaded</code>"
-    )
     
     logger.info("🚀 Sunlo Music is ready to rock!")
 
 async def shutdown():
     logger.warning("🛑 Shutting down gracefully...")
-    await send_log("🛑 <b>Bot is shutting down...</b>")
     try:
-        if calls_module.calls:
-            await calls_module.calls.stop()
+        if calls_module.calls: await calls_module.calls.stop()
         await app.stop()
         await userbot.stop()
         await db.disconnect()
-    except Exception as e:
-        logger.error(f"Error during shutdown: {e}")
+    except: pass
     logger.info("👋 Goodbye!")
 
 async def main():
