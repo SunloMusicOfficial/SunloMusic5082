@@ -6,7 +6,7 @@ import core.calls as calls_module
 from plugins.queue import play_next_in_queue, current_songs
 from utils.decorators import register_user
 from utils.logger import get_logger
-from utils.player_state import playback_start_times, live_timer_tasks, get_player_buttons, get_expanded_buttons, get_player_state, send_now_playing_card
+from utils.player_state import playback_start_times, live_timer_tasks, get_player_buttons, get_expanded_buttons, get_player_state, send_now_playing_card, delete_active_card
 
 logger = get_logger("Controls")
 
@@ -26,9 +26,10 @@ async def skip_cmd(client, message):
     try: await m.delete()
     except: pass
     
-    # 🔥 Naya Card bhejo
     if next_song:
         await send_now_playing_card(client, chat_id, next_song)
+    else:
+        await delete_active_card(chat_id)
 
 @app.on_message(filters.command(["stop", "end"]) & filters.group)
 @register_user
@@ -39,6 +40,8 @@ async def stop_cmd(client, message):
     current_songs.pop(chat_id, None)
     playback_start_times.pop(chat_id, None)
     if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
+    
+    await delete_active_card(chat_id) # 🔥 Delete Card
     await message.reply_text("⏹ **Stream stopped and left VC.**")
 
 @app.on_message(filters.command("pause") & filters.group)
@@ -112,11 +115,12 @@ async def controls_callback(client, query: CallbackQuery):
             await query.answer("⏭ Skipping...")
             playback_start_times.pop(chat_id, None)
             if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
-            await query.message.delete()
             
             next_song = await play_next_in_queue(chat_id)
             if next_song:
                 await send_now_playing_card(client, chat_id, next_song)
+            else:
+                await delete_active_card(chat_id)
             
         elif data == "stop":
             await calls_module.calls.leave_call(chat_id)
@@ -124,7 +128,7 @@ async def controls_callback(client, query: CallbackQuery):
             playback_start_times.pop(chat_id, None)
             if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
             await query.answer("⏹ Stream Stopped")
-            await query.message.delete()
+            await delete_active_card(chat_id)
             
         elif data == "shuffle":
             state["shuffle"] = not state.get("shuffle", False)

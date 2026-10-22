@@ -2,7 +2,7 @@ import random
 import asyncio
 from pytgcalls.types import MediaStream
 import core.calls as calls_module
-from utils.player_state import get_player_state
+from utils.player_state import get_player_state, delete_active_card
 from utils.logger import get_logger
 
 logger = get_logger("QueueManager")
@@ -27,10 +27,16 @@ async def play_next_in_queue(chat_id: int):
     else:
         try:
             await calls_module.calls.leave_call(chat_id)
+            await delete_active_card(chat_id) # 🔥 Delete card if queue empty
             if chat_id in current_songs: del current_songs[chat_id]
             logger.info(f"🚪 Left VC (Queue empty) in {chat_id}")
         except: pass
         return None
+
+    # 🔥 Delete the "Added to Queue" message before playing
+    if "queue_msg" in next_song:
+        try: await next_song["queue_msg"].delete()
+        except: pass
 
     current_songs[chat_id] = next_song
     try:
@@ -45,7 +51,6 @@ async def play_next_in_queue(chat_id: int):
         elif effect == "vaporwave": ffmpeg_args = "-af atempo=0.8,asetrate=44100*0.8"
         elif effect == "karaoke": ffmpeg_args = "-af pan=stereo|c0=c0|c1=-1*c1"
 
-        # 🔥 TIMEOUT FIX
         await asyncio.wait_for(
             calls_module.calls.play(chat_id, MediaStream(stream_url, ffmpeg_parameters=ffmpeg_args)),
             timeout=15

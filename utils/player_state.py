@@ -8,6 +8,7 @@ logger = get_logger("PlayerState")
 playback_start_times = {}
 live_timer_tasks = {}
 chat_states = {}
+active_cards = {} # 🔥 Track Current Playing Message
 
 def get_player_state(chat_id):
     if chat_id not in chat_states:
@@ -61,7 +62,16 @@ async def update_live_timer(chat_id, message, duration_sec):
             else: await message.edit_text(new_caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
         except: pass
 
+async def delete_active_card(chat_id):
+    if chat_id in active_cards:
+        try: await active_cards[chat_id].delete()
+        except: pass
+        del active_cards[chat_id]
+
 async def send_now_playing_card(client, chat_id, song, is_video=False, m=None):
+    # 🔥 Purana card delete karo
+    await delete_active_card(chat_id)
+
     dur_str = get_time_str(song.get('duration', 0))
     title_short = song.get('title', 'Unknown')[:35] + "..." if len(song.get('title', 'Unknown')) > 35 else song.get('title', 'Unknown')
     requester = song.get('requester', 'Channel')
@@ -95,4 +105,5 @@ async def send_now_playing_card(client, chat_id, song, is_video=False, m=None):
     if chat_id in live_timer_tasks: 
         live_timer_tasks[chat_id].cancel()
     if sent_msg:
+        active_cards[chat_id] = sent_msg # 🔥 Save current card
         live_timer_tasks[chat_id] = asyncio.create_task(update_live_timer(chat_id, sent_msg, song.get('duration', 0)))
