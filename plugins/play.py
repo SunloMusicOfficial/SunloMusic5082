@@ -22,14 +22,15 @@ async def play_handler(client, message):
     is_video = cmd == "vplay"
     is_channel = cmd == "cplay"
     
-    # 🔥 FIX: Check if Assistant is in group before playing
+    # 🔥 FIX: Check if Assistant is in group using USERBOT, not BOT
     if not is_channel:
         try:
             userbot_me = await userbot.get_me()
-            await client.get_chat_member(message.chat.id, userbot_me.id)
+            # Use userbot to check if it's in the group
+            await userbot.get_chat_member(message.chat.id, userbot_me.id)
         except Exception:
             return await message.reply_text(
-                f"🚨 **Assistant is not in this group!**\n\n"
+                f"🚨 <b>Assistant is not in this group!</b>\n\n"
                 f"Please add `@{userbot_me.username}` to this group as an Admin, then try again.",
                 parse_mode=enums.ParseMode.HTML
             )
@@ -93,7 +94,6 @@ async def play_song_by_id(client, message, m, song, is_video=False):
     except: pass
     
     try:
-        # Force leave and wait 3 seconds to clear channel cache
         if chat_id in active_calls:
             try: await asyncio.wait_for(calls_module.calls.leave_call(chat_id), timeout=5)
             except: pass
