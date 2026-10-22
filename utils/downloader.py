@@ -1,8 +1,8 @@
 import asyncio
+import aiohttp
 import yt_dlp
 import os
 import time
-import subprocess
 from utils.logger import get_logger
 from config.settings import settings
 
@@ -14,7 +14,7 @@ class Downloader:
         title = query
         duration = 0
         video_id = None
-        
+
         if not query.startswith("http"):
             try:
                 ydl_opts = {"quiet": True, "extract_flat": True, "default_search": "ytsearch1"}
@@ -29,7 +29,7 @@ class Downloader:
                             duration = entry.get("duration", 0)
             except Exception as e:
                 logger.warning(f"⚠️ Search failed: {e}")
-                
+
         if query.startswith("http"):
             video_id = query.split("v=")[-1].split("&")[0]
 
@@ -38,20 +38,21 @@ class Downloader:
 
         if api_url and api_key:
             try:
-                import aiohttp
                 os.makedirs("cache", exist_ok=True)
                 timestamp = int(time.time())
                 
                 async with aiohttp.ClientSession() as session:
                     payload = {"url": video_url, "q": query, "api_key": api_key, "type": "audio"}
+                    
                     async with session.post(f"{api_url.rstrip('/')}/download", json=payload, timeout=60) as resp:
                         if resp.status == 200:
                             content_type = resp.headers.get("Content-Type", "")
+                            
                             if "application/json" in content_type:
                                 data = await resp.json()
                                 stream_url = data.get("url") or data.get("link") or data.get("download_url")
                                 if stream_url:
-                                    # 🔥 FIX: Use API's title and thumbnail to match the audio
+                                    # 🔥 FIX: API ka thumbnail, title use karo
                                     return {
                                         "id": video_id or query, 
                                         "title": data.get("title", title), 
