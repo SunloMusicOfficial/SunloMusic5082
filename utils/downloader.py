@@ -3,8 +3,11 @@ import aiohttp
 import yt_dlp
 import os
 import time
+import re
+import tempfile
 from utils.logger import get_logger
 from config.settings import settings
+from database.cookies import get_active_cookies
 
 logger = get_logger("Downloader")
 
@@ -15,40 +18,63 @@ class Downloader:
         duration = 0
         thumbnail = None
 
-        # 1. YouTube Search (Metadata ke saath)
+        # 1. YouTube URL nikaalo (Bina yt-dlp ke, taaki block na ho)
         if not query.startswith("http"):
-            logger.info(f"🔍 Searching YouTube for: {query}")
+            logger.info(f"🔍 Scraping YouTube for: {query}")
+            
+            # Try 1: Direct Web Scraper (Sabse Fast & Block-Free)
             try:
-                # extract_flat=False se duration aur thumbnail milta hai
-                ydl_opts = {"quiet": True, "extract_flat": False, "default_search": "ytsearch1"}
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    # 'audio' add kiya taaki search result mein gaana aaye
-                    info = ydl.extract_info(f"ytsearch1:{query} audio", download=False)
-                    if "entries" in info and info["entries"]:
-                        entry = info["entries"][0]
-                        if entry.get("id"):
-                            video_url = f"https://www.youtube.com/watch?v={entry['id']}"
-                            title = entry.get("title", query)
-                            duration = entry.get("duration", 0)
-                            # Best thumbnail uthao
-                            thumbnails = entry.get("thumbnails", [])
-                            if thumbnails:
-                                thumbnail = thumbnails[-1].get("url")
-                            else:
-                                thumbnail = entry.get("thumbnail")
-                            logger.info(f"✅ Found URL: {video_url} | Duration: {duration}s")
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+                search_url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}"
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(search_url, headers=headers, timeout=10) as resp:
+                        html = await resp.text()
+                        match = re.search(r'watch\?v=([a-zA-Z0-9_-]{11})', html)
+                        if match:
+                            video_id = match.group(1)
+                            video_url = f"https://www.youtube.com/watch?v={video_id}"
+                            logger.info(f"✅ Found URL via Web Scraper: {video_url}")
             except Exception as e:
-                logger.error(f"❌ Search failed: {e}")
+                logger.warning(f"⚠️ Web Scraper failed: {e}")
 
-        if "None" in video_url:
-            return None
+            # Try 2: yt-dlp search (Agar scraper fail ho jaye)
+            if video_url == query:
+                cookies = await get_active_cookies()
+                cookie_path = None
+                if cookies:
+                    temp_fd, cookie_path = tempfile.mkstemp(suffix=".txt")
+                    with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
+                        f.write(cookies[0]["data"])
 
-        # 2. API Call
+                try:
+                    ydl_opts = {"quiet": True, "extract_flat": True, "default_search": "ytsearch1"}
+                    if cookie_path:
+                        ydl_opts["cookiefile"] = cookie_path
+
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+                        if "entries" in info and info["entries"]:
+                            entry = info["entries"][0]
+                            if entry.get("id"):
+                                video_url = f"https://www.youtube.com/watch?v={entry['id']}"
+                                logger.info(f"✅ Found URL via yt-dlp: {video_url}")
+                except Exception as e:
+                    logger.warning(f"⚠️ yt-dlp search failed: {e}")
+                finally:
+                    if cookie_path and os.path.exists(cookie_path):
+                        os.remove(cookie_path)
+
+            # Agar dono fail ho gaye
+            if video_url == query:
+                logger.error("❌ Could not find video URL.")
+                return None
+
+        # 2. API ko Sahi URL bhejo
         api_url = getattr(settings, "SUNLO_DOWNLOAD_API_URL", "")
         api_key = getattr(settings, "SUNLO_DOWNLOAD_API_KEY", "")
 
         if api_url and api_key:
-            logger.info(f"🚀 Requesting Audio File from API for: {video_url}")
+            logger.info(f"🚀 Requesting API for URL: {video_url}")
             try:
                 os.makedirs("cache", exist_ok=True)
                 timestamp = int(time.time())
@@ -75,19 +101,17 @@ class Downloader:
                                         "uploader": "API"
                                     }
                             
-                            # Agar API direct file (audio/mp4) return kare
+                            # Agar API direct file return kare
                             else:
                                 ext = ".m4a" if "mp4" in content_type else ".mp3"
                                 file_path = f"cache/api_{timestamp}{ext}"
                                 
-                                logger.info(f"📥 API returned direct file ({content_type}). Saving as {ext}...")
+                                logger.info(f"📥 Saving API file as {ext}...")
                                 with open(file_path, "wb") as f:
                                     async for chunk in resp.content.iter_chunked(65536):
                                         f.write(chunk)
                                 
-                                logger.info(f"✅ Audio file saved to: {file_path}")
-                                
-                                # 🔥 FIX: Ab hum yt-dlp wala duration aur thumbnail return kar rahe hain
+                                logger.info(f"✅ Saved: {file_path}")
                                 return {
                                     "id": video_url.split("v=")[-1], 
                                     "title": title, 
@@ -97,12 +121,13 @@ class Downloader:
                                     "uploader": "API File"
                                 }
                         else:
-                            logger.error(f"❌ API returned error status: {resp.status}")
+                            error_text = await resp.text()
+                            logger.error(f"❌ API error {resp.status}: {error_text[:100]}")
                             
             except asyncio.TimeoutError:
-                logger.error("❌ API Timeout after 40 seconds.")
+                logger.error("❌ API Timeout.")
             except Exception as e:
-                logger.error(f"❌ API Request failed: {e}")
+                logger.error(f"❌ API failed: {e}")
 
         return None
 
