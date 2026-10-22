@@ -6,12 +6,11 @@ import core.calls as calls_module
 from plugins.queue import play_next_in_queue, get_player_state, current_songs
 from utils.decorators import register_user
 from utils.logger import get_logger
-from plugins.play import playback_start_times, live_timer_tasks, get_player_buttons
+from plugins.play import playback_start_times, live_timer_tasks, get_player_buttons, get_expanded_buttons
 
 logger = get_logger("Controls")
 
 # ── TEXT COMMANDS ──
-
 @app.on_message(filters.command("skip") & filters.group)
 @register_user
 async def skip_cmd(client, message):
@@ -20,9 +19,7 @@ async def skip_cmd(client, message):
         return await message.reply_text("❌ **No song is currently playing.**")
     
     playback_start_times.pop(chat_id, None)
-    if chat_id in live_timer_tasks:
-        live_timer_tasks[chat_id].cancel()
-        
+    if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
     await message.reply_text("⏭ **Skipping...**")
     await play_next_in_queue(chat_id)
 
@@ -30,15 +27,11 @@ async def skip_cmd(client, message):
 @register_user
 async def stop_cmd(client, message):
     chat_id = message.chat.id
-    try:
-        await calls_module.calls.leave_call(chat_id)
+    try: await calls_module.calls.leave_call(chat_id)
     except: pass
-    
     current_songs.pop(chat_id, None)
     playback_start_times.pop(chat_id, None)
-    if chat_id in live_timer_tasks:
-        live_timer_tasks[chat_id].cancel()
-        
+    if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
     await message.reply_text("⏹ **Stream stopped and left VC.**")
 
 @app.on_message(filters.command("pause") & filters.group)
@@ -50,8 +43,7 @@ async def pause_cmd(client, message):
         await calls_module.calls.pause(chat_id)
         state["is_paused"] = True
         await message.reply_text("⏸ **Stream Paused.**")
-    except:
-        await message.reply_text("❌ **No active stream to pause.**")
+    except: await message.reply_text("❌ **No active stream to pause.**")
 
 @app.on_message(filters.command("resume") & filters.group)
 @register_user
@@ -62,12 +54,10 @@ async def resume_cmd(client, message):
         await calls_module.calls.resume(chat_id)
         state["is_paused"] = False
         await message.reply_text("▶️ **Stream Resumed.**")
-    except:
-        await message.reply_text("❌ **No paused stream found.**")
+    except: await message.reply_text("❌ **No paused stream found.**")
 
 # ── CALLBACK QUERIES (BUTTONS) ──
-
-@app.on_callback_query(filters.regex("^(pause_resume|shuffle|loop|skip|stop|seek_m10|seek_p10)$"))
+@app.on_callback_query(filters.regex("^(pause_resume|shuffle|loop|skip|stop|seek_m10|seek_p10|more_controls|back_to_main|vol_up|vol_down)$"))
 async def controls_callback(client, query: CallbackQuery):
     data, chat_id = query.data, query.message.chat.id
     state = get_player_state(chat_id)
@@ -85,8 +75,26 @@ async def controls_callback(client, query: CallbackQuery):
                 if chat_id in playback_start_times:
                     state["paused_time"] = time.time() - playback_start_times[chat_id]
                 await query.answer("⏸ Stream Paused")
-            
             await query.message.edit_reply_markup(reply_markup=get_player_buttons(chat_id))
+
+        elif data == "more_controls":
+            await query.message.edit_reply_markup(reply_markup=get_expanded_buttons(chat_id))
+            await query.answer("✨ More Controls Opened")
+
+        elif data == "back_to_main":
+            await query.message.edit_reply_markup(reply_markup=get_player_buttons(chat_id))
+            await query.answer("🔙 Back to Main")
+
+        elif data in ["vol_up", "vol_down"]:
+            current_vol = state.get("volume", 100)
+            if data == "vol_up":
+                new_vol = min(200, current_vol + 20)
+            else:
+                new_vol = max(10, current_vol - 20)
+            
+            state["volume"] = new_vol
+            await calls_module.calls.change_volume_call(chat_id, new_vol)
+            await query.answer(f"🔊 Volume: {new_vol}%")
 
         elif data in ["seek_m10", "seek_p10"]:
             if chat_id not in playback_start_times:
@@ -102,8 +110,7 @@ async def controls_callback(client, query: CallbackQuery):
         elif data == "skip":
             await query.answer("⏭ Skipping...")
             playback_start_times.pop(chat_id, None)
-            if chat_id in live_timer_tasks:
-                live_timer_tasks[chat_id].cancel()
+            if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
             await query.message.delete()
             await play_next_in_queue(chat_id)
             
@@ -111,8 +118,7 @@ async def controls_callback(client, query: CallbackQuery):
             await calls_module.calls.leave_call(chat_id)
             current_songs.pop(chat_id, None)
             playback_start_times.pop(chat_id, None)
-            if chat_id in live_timer_tasks:
-                live_timer_tasks[chat_id].cancel()
+            if chat_id in live_timer_tasks: live_timer_tasks[chat_id].cancel()
             await query.answer("⏹ Stream Stopped")
             await query.message.delete()
             
@@ -125,6 +131,7 @@ async def controls_callback(client, query: CallbackQuery):
             state["loop"] = not state.get("loop", False)
             await query.answer(f"🔁 Loop {'ON' if state['loop'] else 'OFF'}")
             await query.message.edit_reply_markup(reply_markup=get_player_buttons(chat_id))
+            
     except Exception as e:
         logger.error(f"Callback error: {e}")
         await query.answer("❌ Error occurred.", show_alert=True)

@@ -28,14 +28,21 @@ def generate_bar(current, total, length=8):
 
 def get_player_buttons(chat_id):
     state = get_player_state(chat_id)
-    play_btn = "▶️ ʀᴇꜱᴜᴍᴇ" if state["is_paused"] else "⏸️ ᴘᴀᴜꜱᴇ"
-    loop_btn = "🔁 ʟᴏᴏᴘ ᴏɴ" if state["loop"] else "🔁 ʟᴏᴏᴘ ᴏꜰꜰ"
-    shuffle_btn = "🔀 ꜱʜᴜꜰꜰʟᴇ ᴏɴ" if state["shuffle"] else "🔀 ꜱʜᴜꜰꜰʟᴇ ᴏꜰꜰ"
+    play_btn = "▶️ ʀᴇꜱᴜᴍᴇ" if state.get("is_paused", False) else "⏸️ ᴘᴀᴜꜱᴇ"
+    loop_btn = "🔁 ʟᴏᴏᴘ ᴏɴ" if state.get("loop", False) else "🔁 ʟᴏᴏᴘ ᴏꜰꜰ"
+    shuffle_btn = "🔀 ꜱʜᴜꜰꜰʟᴇ ᴏɴ" if state.get("shuffle", False) else "🔀 ꜱʜᴜꜰꜰʟᴇ ᴏꜰꜰ"
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(play_btn, callback_data="pause_resume"), InlineKeyboardButton("⏭️ ꜱᴋɪᴘ", callback_data="skip")],
         [InlineKeyboardButton(shuffle_btn, callback_data="shuffle"), InlineKeyboardButton(loop_btn, callback_data="loop")],
-        [InlineKeyboardButton("⏪ -10s", callback_data="seek_m10"), InlineKeyboardButton("⏩ +10s", callback_data="seek_p10")],
-        [InlineKeyboardButton("⏹️ ꜱᴛᴏᴘ ꜱᴛʀᴇᴀᴍ", callback_data="stop")]
+        [InlineKeyboardButton("✨ ᴍᴏʀᴇ ᴄᴏɴᴛʀᴏʟꜱ", callback_data="more_controls")]
+    ])
+
+def get_expanded_buttons(chat_id):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⏪ -10ꜱ", callback_data="seek_m10"), InlineKeyboardButton("⏩ +10ꜱ", callback_data="seek_p10")],
+        [InlineKeyboardButton("🔊 ᴠᴏʟᴜᴍᴇ +", callback_data="vol_up"), InlineKeyboardButton("🔉 ᴠᴏʟᴜᴍᴇ -", callback_data="vol_down")],
+        [InlineKeyboardButton("⏹️ ꜱᴛᴏᴘ ꜱᴛʀᴇᴀᴍ", callback_data="stop")],
+        [InlineKeyboardButton("🔙 ʙᴀᴄᴋ ᴛᴏ ᴍᴀɪɴ", callback_data="back_to_main")]
     ])
 
 async def update_live_timer(chat_id, message, duration_sec):
@@ -108,7 +115,6 @@ async def play_song_by_id(client, message, m, song, is_video=False):
     except: pass
     
     try:
-        # Clear stuck state if any
         try:
             await calls_module.calls.leave_call(chat_id)
             await asyncio.sleep(1)
@@ -127,14 +133,13 @@ async def play_song_by_id(client, message, m, song, is_video=False):
         thumb = song.get('thumbnail')
         sent_msg = None
         
-        # 🔥 FIX: Try to send photo first. If fails, send text.
         if thumb and not is_video:
             try:
                 sent_msg = await client.send_photo(chat_id, photo=thumb, caption=caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
                 try: await m.delete()
                 except: pass
             except Exception as e:
-                logger.error(f"Thumbnail send failed: {e}. Sending text instead.")
+                logger.error(f"Thumbnail send failed: {e}")
                 try: sent_msg = await m.edit_text(caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
                 except:
                     sent_msg = await client.send_message(chat_id, caption, reply_markup=btns, parse_mode=enums.ParseMode.HTML)
@@ -150,7 +155,6 @@ async def play_song_by_id(client, message, m, song, is_video=False):
         
     except Exception as e:
         logger.error(f"Play error: {e}")
-        # 🔥 FIX: If play fails, clear state so next song isn't queued
         current_songs.pop(chat_id, None)
         try: await m.edit_text(f"❌ <b>ꜰᴀɪʟᴇᴅ ᴛᴏ ᴊᴏɪɴ ᴠᴄ.</b>\n<code>{e}</code>", parse_mode=enums.ParseMode.HTML)
         except:
