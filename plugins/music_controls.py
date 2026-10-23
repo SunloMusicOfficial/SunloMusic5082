@@ -14,7 +14,7 @@ logger = get_logger("MusicControls")
 @register_user
 async def seek_cmd(client, message):
     if len(message.command) < 2:
-        return await message.reply_text("⏩ <b>Usage:</b> <code>/seek 1:30</code>", parse_mode=enums.ParseMode.HTML)
+        return await message.reply_text("⏩ <b>Usage:</b> <code>/seek 1:30</code> ya <code>/seek 30</code>", parse_mode=enums.ParseMode.HTML)
     
     chat_id = message.chat.id
     try:
